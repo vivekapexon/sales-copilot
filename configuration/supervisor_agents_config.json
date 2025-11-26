@@ -1,0 +1,97 @@
+{
+  "profile_agent": {
+    "description": "Builds a single HCP 360 summary for personalization.",
+    "responsibilities": "Return demographics, specialties, practice setting, preferred communication channels, decision-making role, and personalization hooks for field engagement.",
+    "typical_inputs": ["Dr. Jane Doe", "hcp_id:12345", "email:jane.doe@example.com"],
+    "selection_signals": ["profile", "background", "specialty", "who is", "about Dr", "practice type", "prefers"],
+    "examples_of_use": [
+      "Prepare personalized intro for an upcoming call with Dr. Smith",
+      "Find HCP specialty and preferred contact method to tailor outreach"
+    ],
+    "tools": {
+      "get_profile": {
+        "description": "Return HCP demographics, specialty, affiliations and personalization signals."
+      }
+    }
+  },
+
+  "history_agent": {
+    "description": "Retrieves recent interactions, objections, and notes from prior visits.",
+    "responsibilities": "Return past meeting dates, outcomes, open objections, who attended, follow-up requests and action items.",
+    "typical_inputs": ["Dr. Smith", "hcp_id:12345", "last 6 months"],
+    "selection_signals": ["last visit", "previous notes", "objections", "follow-up", "history", "what did we discuss"],
+    "examples_of_use": [
+      "Summarize the last two calls with Dr. Smith and outstanding objections",
+      "Show payer or access objections raised previously"
+    ],
+    "tools": {
+      "get_history": {
+        "description": "Returns last interactions, notes, and unresolved objections."
+      }
+    }
+  },
+
+  "prescribing_agent": {
+    "description": "Analyzes prescribing trends and therapy switches at HCP and peer level.",
+    "responsibilities": "Provide recent Rx volumes, share shifts vs competitors, common switches, growth opportunities and potential eligible patient counts.",
+    "typical_inputs": ["Dr. Smith", "hcp_id:12345", "last 90 days"],
+    "selection_signals": ["prescribing", "rx trends", "switches", "script volume", "who is prescribing", "market share"],
+    "examples_of_use": [
+      "Is Dr. X increasing prescriptions of Product A versus Competitor B?",
+      "Identify patients eligible for a therapy switch"
+    ],
+    "tools": {
+      "get_prescribing": {
+        "description": "Return prescribing habits, volume trends, and therapy switch signals."
+      }
+    }
+  },
+
+  "access_agent": {
+    "description": "Provides formulary, payer & access updates and patient support program information.",
+    "responsibilities": "Return current formulary tiering, recent payer decisions, prior authorization requirements and reimbursement FAQs relevant to the HCP's patient population.",
+    "typical_inputs": ["Dr. Smith", "payer Aetna", "zipcode:02139"],
+    "selection_signals": ["formulary", "coverage", "tier", "prior authorization", "access", "reimbursement", "patient assistance"],
+    "examples_of_use": [
+      "Check if Product A has favorable tiering for Dr. Smith's patients",
+      "List prior authorization criteria for Product A for Medicare patients"
+    ],
+    "tools": {
+      "get_access": {
+        "description": "Return formulary wins/losses and recent access changes for the HCP."
+      }
+    }
+  },
+
+  "competitive_agent": {
+    "description": "Surfaces competitor activity, messaging pushes, and clinical events.",
+    "responsibilities": "Return competitor product launches, promotional themes, recent trial data, speakers, and local sales activity that may impact the HCP.",
+    "typical_inputs": ["Dr. Smith", "competitor X", "therapy area:lipid"],
+    "selection_signals": ["competitor", "trial", "new study", "wins", "market activity", "promotion"],
+    "examples_of_use": [
+      "Has Competitor X released new efficacy data relevant to Dr. Smith?",
+      "Is there heightened competitor detailing in Dr. Smith's territory?"
+    ],
+    "tools": {
+      "get_competitive": {
+        "description": "Return competitor activity summary and signals of share shifts."
+      }
+    }
+  },
+
+  "content_agent": {
+    "description": "Selects approved content and sales assets matched to objective and HCP context.",
+    "responsibilities": "Recommend the top-call materials (one-pager, dosing card, clinical summary), digital links, and leave-behind content aligned to HCP's interests and objections.",
+    "typical_inputs": ["Dr. Smith", "objective:convert trial", "audience:cardiologist"],
+    "selection_signals": ["materials", "brochure", "dosing card", "clinical data", "leave-behind", "slides", "patient handout"],
+    "examples_of_use": [
+      "Recommend materials for a first in-office visit with a new cardiologist",
+      "Find payer-focused one-pager for field to share with office manager"
+    ],
+    "tools": {
+      "get_content": {
+        "description": "Return recommended content pieces and asset links."
+      }
+    }
+  }
+}

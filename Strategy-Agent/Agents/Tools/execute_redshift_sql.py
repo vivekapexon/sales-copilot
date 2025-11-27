@@ -28,12 +28,9 @@ def get_parameter_value(parameter_name):
 # ----------------------
 # Configuration 
 # ----------------------
-WORKGROUP = "sales-copilot-workgroup"
-DATABASE = "sales_copilot_db"
-SECRET_ARN = (
-    "arn:aws:secretsmanager:us-east-1:969385807621:"
-    "secret:redshift!sales-copilot-namespace-sales_copilot_admin-seNjuJ"
-)
+WORKGROUP = get_parameter_value("REDSHIFT_WORKGROUP")
+DATABASE = get_parameter_value("SC_REDSHIFT_DATABASE")
+SECRET_ARN = get_parameter_value("SC_REDSHIFT_SECRET_ARN")
 
 # Optional: set a default row limit for arbitrary SQL to avoid accidental full-table scans
 DEFAULT_SQL_LIMIT = 1000

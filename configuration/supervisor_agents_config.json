@@ -1,3 +1,4 @@
+
 {
   "profile_agent": {
     "description": "Builds a single HCP 360 summary for personalization.",
@@ -8,7 +9,8 @@
       "Prepare personalized intro for an upcoming call with Dr. Smith",
       "Find HCP specialty and preferred contact method to tailor outreach"
     ],
-    "tools": {
+    
+    "tools": { 
       "get_profile": {
         "description": "Return HCP demographics, specialty, affiliations and personalization signals."
       }

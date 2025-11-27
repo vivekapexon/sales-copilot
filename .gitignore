@@ -52,3 +52,6 @@ coverage.xml
 docs/
 #local logs
 LOGS/
+#local testing
+testing.ipynb
+content_agent_output.json

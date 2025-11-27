@@ -1,5 +1,38 @@
+# ---------------------------------------------------------------------------
+# SUPERVISOR SYSTEM SUMMARY
+# ---------------------------------------------------------------------------
+# This module implements a Supervisor Agent that routes any incoming USER QUERY
+# to the most appropriate sub-agent based on LLM reasoning and subagents descrption defined in json file under configuration folder.
+#
+# ✔ The Supervisor prompts a routing LLM (or a stub in debug mode) to return:
+#      {
+#        reasoning: "...",
+#        confidence: 0.xx,
+#        calls: [{ agent, input, why, confidence }]
+#      }
+#
+# ✔ Even if the LLM suggests a short or partial 'input' (e.g., "cardiology"),
+#   the Supervisor ALWAYS overrides this and passes the FULL ORIGINAL USER QUERY
+#   to the selected sub-agent's tool.
+#
+# ✔ This guarantees consistent sub-agent behavior regardless of LLM output,
+#   in both debug mode and real Bedrock production calls.
+#
+# ✔ In DEBUG_STUB_LLM mode, the stubbed LLM response is also updated to return
+#   the full user query as 'input' for easier local testing.
+#
+# ✔ In production mode, real Bedrock LLM routing is used, but the Supervisor
+#   still forces the sub-agent 'input' to the full original user query.
+#
+# Overall:
+# - LLM decides WHICH agent to call.
+# - Supervisor decides WHAT input is passed (always the full user query).
+# - Sub-agents execute deterministically using the chosen tool and full query.
+# ---------------------------------------------------------------------------
+
+
 import json
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any
 import boto3
 import botocore
 import os
@@ -61,7 +94,7 @@ def call_bedrock_llm(prompt: str) -> str: # type: ignore
             "calls": [
                 {
                     "agent": "profile_agent",
-                    "input": "Dr. Smith",
+                    "input": prompt,
                     "why": "Stubbed routing",
                     "confidence": 0.95
                 }
@@ -181,7 +214,7 @@ class SupervisorAgent(Agent):
               calls: [
                 {
                   agent: profile_agent,
-                  input: "Dr. Jane Doe",
+                  input: actual user query,
                   why: "User needs HCP background and personalization hooks; profile_agent is designed for HCP profiles.",
                   confidence: 0.95
                 }
@@ -197,7 +230,7 @@ class SupervisorAgent(Agent):
               calls: [
                 {
                   agent: history_agent,
-                  input: "Dr. Smith; last 6 months",
+                  input: actual user query
                   why: "History agent returns prior interactions, open objections and action items useful for the rep.",
                   confidence: 0.95
                 }
@@ -220,7 +253,19 @@ class SupervisorAgent(Agent):
         )
 
     def run(self, user_input: str) -> Dict[str, Any]:
-        """Run the supervisor: LLM routing → calling agents → returning results."""
+        """
+        Execute the supervisor agent workflow.
+
+        Args:
+            user_input (str): The user's message to be processed and routed by the LLM.
+
+        Returns:
+            Dict[str, Any]: A JSON-compatible dictionary containing the selected agent's 
+            name and the reasoning behind the routing decision.
+
+        Workflow:
+            LLM routing → Agent invocation → Result aggregation → Return final output.
+    """
         try:
             routing_raw = self._ask_llm(user_input)
         except Exception as e:
@@ -235,21 +280,22 @@ class SupervisorAgent(Agent):
             return {"error": "LLM returned invalid JSON.", "raw": routing_raw}
 
         results = []
-    
 
         for call in routing_json.get("calls", []):
             agent_name = call.get("agent")
-            tool_input = call.get("input", "")
-
+        
             if not agent_name:
                 results.append({
                     "error": "Missing agent name in call'.",
                     "call": call
                 })
                 continue
+            
+            # Force tool_input to always be the full original user query
+            tool_input = user_input
 
             execution = self._execute_agent(agent_name, tool_input)
-
+            # in prod we will replace with actual agents calls here
             results.append({
                 "agent": agent_name,
                 "input": tool_input,
@@ -260,8 +306,6 @@ class SupervisorAgent(Agent):
             "reasoning": routing_json.get("reasoning"),
             "results": results
         }
-
-
 
     # -----------------------------------------------------------------------
     # LLM interaction

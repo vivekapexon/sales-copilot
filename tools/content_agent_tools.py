@@ -1,42 +1,33 @@
 
-import json
-import re
-from typing import List, Any, Dict
-import pandas as pd
-import os
-from strands import Agent, tool
-import boto3
-import io
-from strands.models import BedrockModel
-from dotenv import load_dotenv
-load_dotenv()
-model =BedrockModel()
-from logger import logger
 
+import re
+import os
+import json
+import boto3
+import pandas as pd
+import io
+from typing import List, Any, Dict
+from strands import  tool
+from utilities.logger import logger
 # Load S3-related environment variables
-url = os.environ.get("S3_CSV_URL")
+content_agent_S3_csv_url = os.environ.get("CONTENT_AGENT_S3_CSV_URL")
 aws_access_key_id = os.environ.get("AWS_ACCESS_KEY_ID")
 aws_secret_access_key = os.environ.get("AWS_SECRET_ACCESS_KEY")
-aws_session_token = os.environ.get("AWS_SESSION_TOKEN")
 aws_region = os.environ.get("AWS_REGION")
+OUTPUT_FILE = "content_agent_output.json"
 
 # --- Paths ---
 try:
     BASE_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), ".."))
 except NameError:
     BASE_DIR = os.path.normpath(os.path.join(os.getcwd(), ".."))
-print(BASE_DIR)
+
 CSV_PATH = os.path.normpath(
     os.path.join(
         BASE_DIR,
-        "Feild InT Agent",
-        "Pre and Post Call datasets with Metadata 1",
-        "Pre-Call",
         "personalized_call_briefs.csv",
     )
 )
-
-OUTPUT_FILE = "content_agent_output.json"
 
 # --- Helpers ---
 def _is_s3_url(u: str) -> bool:
@@ -73,6 +64,8 @@ def _extract_percent(text: str) -> float:
             return 0.0
 
     return 0.0
+
+
 @tool
 def read_personalized_csv(url: str = "") -> List[Dict[str, Any]]:
     """
@@ -163,7 +156,6 @@ def read_personalized_csv(url: str = "") -> List[Dict[str, Any]]:
     raise FileNotFoundError(
         f"No CSV found. Provide an S3 URL, a valid local path, or ensure a CSV exists at {CSV_PATH}."
     )
-
 
 @tool
 def analyze_hcps(records: List[Dict[str, Any]], hcp_ids: List[str]) -> List[Dict[str, Any]]:
@@ -304,47 +296,3 @@ def save_json(data: List[Dict[str, Any]], path: str = OUTPUT_FILE) -> str:
         json.dump(data, f, indent=2)
 
     return path
-
-
-# --- Agent wrapper ---
-def _tools_list() -> List[Any]:
-    return [read_personalized_csv, analyze_hcps, save_json]
-
-agent = Agent(
-        system_prompt="""
-        You are Content-Agent (MOA & KOL engagement analyzer).
-        Analyze HCP engagement and output a ranked JSON array.
-        """,
-        tools=_tools_list(),
-    )
-
-
-# --- Runner ---
-def run_content_agent(hcp_ids: List[str]) -> List[Dict[str, Any]]:
-    print("Running Agent")
-    records = read_personalized_csv(url="https://localhost")
-    print(f"Showing csv records{records}")
-    instruction = "Analyze and return ranked JSON array for the given hcp_ids."
-    
-    try:
-        agent_result = agent(instruction, records=records, hcp_ids=hcp_ids)
-        text_out = getattr(agent_result, "text", None) or str(agent_result)
-        parsed = json.loads(text_out)
-    except Exception:
-        parsed = analyze_hcps(records, hcp_ids)
-
-    save_json(parsed, OUTPUT_FILE)
-    return parsed
-
-
-
-if __name__ == "__main__":
-    import sys
-
-    if len(sys.argv) < 2:
-        print("Usage: python content_agent.py hcp_id [HCP_ID ...]")
-        sys.exit(1)
-
-    hcp_ids = sys.argv[1:]
-    out = run_content_agent(hcp_ids)
-    print(json.dumps(out, indent=2))

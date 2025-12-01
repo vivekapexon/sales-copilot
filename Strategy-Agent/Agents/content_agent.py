@@ -3,6 +3,8 @@ from typing import List, Any, Dict
 import os
 from strands import Agent
 from strands.models import BedrockModel
+from .Tools.content_agent_tool import read_personalized_csv
+
 from dotenv import load_dotenv
 load_dotenv()
 model = BedrockModel()

@@ -3,6 +3,9 @@ from strands import Agent
 from Agents import profile_agent
 from Agents import prescribe_agent
 from Agents import history_agent
+from Agents import access_agent
+from Agents import competitive_agent
+from Agents import content_agent
 
 # ----------------------
 # Agent prompt
@@ -136,6 +139,36 @@ Example:
             Brand adoption journey: "<adoption_stage_ordinal> (0: "Aware / Non-user", 1: "Considering", 2: "Trialing", 3: "Adopting", 4: "Champion", 5: "Regular User") Just print labels"
             }} 
         }}
+    4. If AccessAgent is called, output:
+        {{
+            "status": "success",
+            "coverage_status": {{
+                "tier": <1-4 or null>,
+                "prior_auth_requirement": "<None/Some plans/All plans>",
+                "step_therapy_requirement": "<None/Some/All>",
+                "copay_median_usd": <float or null>,
+                "recent_change": "<Win/Loss/None>",
+                "alert_severity": "<None/Low/Medium/High>"
+            }},
+            "actionable_opportunities": [
+                "Specific action sales rep can take with context and numbers",
+                "Another actionable insight based on payer mix or barriers"
+            ],
+            "citation": {{
+                "source": "formulary_mart",
+                "primary_key": {{"column": "hcp_id", "value": "<actual_id>"}}
+            }}
+        }}
+    5. If CompetativeAgent is called, output:
+        {{
+            "json": {{ ... }},
+            "text": "human readable explanation"
+        }}
+    6. If ContentAgent is called, output:
+        {{
+            "json":{{...}},
+            "text": "human readable explanation"
+        }}
 - Do not add any extra information or explanation from your end like agent name on output just follow json output.
 - Do not modify the output from the agents.
 ----------------------------------------------------------------
@@ -147,7 +180,7 @@ Example:
 # Agent tools list and creation
 # ----------------------
 def _tools_list():
-    return [profile_agent, prescribe_agent, history_agent]
+    return [profile_agent, prescribe_agent, history_agent, access_agent, competitive_agent, content_agent]
 
 def create_strategy_agent():
     return Agent(

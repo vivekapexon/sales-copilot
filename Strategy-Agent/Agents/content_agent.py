@@ -2,6 +2,10 @@ import json
 from typing import List, Any, Dict
 from strands import Agent
 from strands.models import BedrockModel
+from .Tools.content_agent_tool import read_personalized_csv
+
+from dotenv import load_dotenv
+load_dotenv()
 model = BedrockModel()
 from .Tools.content_agent_tool import *
 from .Tools.execute_redshift_sql import get_parameter_value

@@ -1,29 +1,10 @@
 import re
 import os
-import json
 import boto3
 import pandas as pd
 import io
 from typing import List, Any, Dict
 from strands import  tool
-# Load S3-related environment variables
-content_agent_S3_csv_url = os.environ.get("CONTENT_AGENT_S3_CSV_URL")
-aws_access_key_id = os.environ.get("AWS_ACCESS_KEY_ID")
-aws_secret_access_key = os.environ.get("AWS_SECRET_ACCESS_KEY")
-aws_region = os.environ.get("AWS_REGION")
-
-# --- Paths ---
-try:
-    BASE_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), ".."))
-except NameError:
-    BASE_DIR = os.path.normpath(os.path.join(os.getcwd(), ".."))
-
-CSV_PATH = os.path.normpath(
-    os.path.join(
-        BASE_DIR,
-        "personalized_call_briefs.csv",
-    )
-)
 
 # --- Helpers ---
 def _is_s3_url(u: str) -> bool:
@@ -61,33 +42,27 @@ def _extract_percent(text: str) -> float:
 
     return 0.0
 
-
 @tool
-def read_personalized_csv(url: str = "") -> List[Dict[str, Any]]:
+def read_personalized_csv(url: str = "", csv_content_limit: int = 10) -> List[Dict[str, Any]]:
     """
-    Load a CSV file from an S3 URL, a local file path, or a fallback CSV packaged
+    Load a CSV file from an S3 URL.
     with the application.
 
     Use this tool when the user wants to load HCP/CRM data, records, or any other
-    structured dataset that is stored in CSV format. The tool supports three data
+    structured dataset that is stored in CSV format. The tool supports below data
     sources in order of priority:
         1. An S3 URL (starting with s3://)
-        2. A local filesystem path provided by the user
-        3. A default fallback CSV file available in the repository
+ 
 
     Parameters:
         url: A string representing either:
             - An S3 URL of the form "s3://bucket-name/path/to/file.csv"
-            - A local filesystem path to a CSV file
-            - An empty string, in which case the fallback CSV is used if present
+        csv_content_limit: A integer representing limit of csv data to be passed to llm.
 
     Behavior:
         - If `url` is an S3 URL:
             * Validates AWS credentials via STS.
             * Reads the CSV from S3.
-        - If `url` is a local file path and exists:
-            * Loads the CSV from disk.
-        - Otherwise, attempts to load a fallback CSV defined by CSV_PATH.
 
     Returns:
         A list of dictionaries, where each dictionary corresponds to a row in
@@ -96,7 +71,7 @@ def read_personalized_csv(url: str = "") -> List[Dict[str, Any]]:
 
     Raises:
         RuntimeError: If AWS credentials are missing/invalid or if an S3 read error occurs.
-        FileNotFoundError: If the file cannot be located in S3, locally, or via fallback.
+        FileNotFoundError: If the file cannot be located in S3
     """
 
     # --- 1. Load from S3 ---
@@ -106,24 +81,11 @@ def read_personalized_csv(url: str = "") -> List[Dict[str, Any]]:
         bucket, key = without_prefix.split("/", 1)
 
         try:
-            session = boto3.Session(
-                aws_access_key_id=aws_access_key_id,
-                aws_secret_access_key=aws_secret_access_key,
-                # aws_session_token=aws_session_token, # if using temp credentails
-                region_name=aws_region,
-            )
-            # Validate credentials early
-            sts = session.client("sts")
-            sts.get_caller_identity()
-        except Exception as e:
-            raise RuntimeError(f"Invalid or missing AWS credentials: {e}")
-
-        try:
-            s3 = session.client("s3")
+            s3 = boto3.client("s3",region_name='us-east-1')
             obj = s3.get_object(Bucket=bucket, Key=key)
 
             raw_bytes = obj["Body"].read()  # read correct buffer
-            df = pd.read_csv(io.BytesIO(raw_bytes), dtype=str)
+            df = pd.read_csv(io.BytesIO(raw_bytes), dtype=str)[:csv_content_limit]
             df = df.fillna("")
 
             return df.to_dict(orient="records")  # type: ignore
@@ -135,22 +97,9 @@ def read_personalized_csv(url: str = "") -> List[Dict[str, Any]]:
         except Exception as e:
             raise RuntimeError(f"Error reading S3 CSV: {e}")
 
-    # --- 2. Load from user-provided local path ---
-    if url and os.path.exists(url):
-        df = pd.read_csv(url, dtype=str)
-        df = df.fillna("")
-        return df.to_dict(orient="records")  # type: ignore
-
-    # --- 3. Load from fallback CSV ---
-    if os.path.exists(CSV_PATH):
-        print(f"Using fallback CSV at: {CSV_PATH}")
-        df = pd.read_csv(CSV_PATH, dtype=str)
-        df = df.fillna("")
-        return df.to_dict(orient="records")  # type: ignore
-
     # --- 4. Nothing found ---
     raise FileNotFoundError(
-        f"No CSV found. Provide an S3 URL, a valid local path, or ensure a CSV exists at {CSV_PATH}."
+        f"No CSV found Provide an S3 URL."
     )
 
 @tool
@@ -265,29 +214,3 @@ def analyze_hcps(records: List[Dict[str, Any]], hcp_ids: List[str]) -> List[Dict
     not_found = [x for x in results if x["reason"] == "HCP id not found"]
 
     return ranked + not_found
-
-
-    """
-    Save a list of dictionaries as a JSON file on disk.
-
-    Use this tool when to export, store, or save structured
-    data in JSON format. The data should be a list where each element is a
-    dictionary. If the directory in the provided path does not exist, it will
-    be created automatically.
-
-    Parameters:
-        data: A list of dictionaries containing the structured data to save.
-        path: The file path where the JSON file should be written. If not
-              provided, the default OUTPUT_FILE path is used.
-
-    Returns:
-        The full file path of the saved JSON file.
-    """
-    folder = os.path.dirname(path)
-    if folder and not os.path.exists(folder):
-        os.makedirs(folder, exist_ok=True)
-
-    with open(path, "w") as f:
-        json.dump(data, f, indent=2)
-
-    return path

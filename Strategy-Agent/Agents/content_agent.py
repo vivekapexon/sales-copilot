@@ -1,23 +1,25 @@
+# content_agent.py
 import json
 from typing import List, Any, Dict
 from strands import Agent
 from strands.models import BedrockModel
-from .Tools.content_agent_tool import read_personalized_csv
 
-from dotenv import load_dotenv
-load_dotenv()
 model = BedrockModel()
-from .Tools.content_agent_tool import *
-from .Tools.execute_redshift_sql import get_parameter_value
+# Importing external tools and helper functions
+from Tools.content_agent_tool import *
+from Tools.execute_redshift_sql import get_parameter_value
 
-CONTENT_AGENT_S3_CSV_URL = get_parameter_value("CONTENT_AGENT_S3_CSV_URL")
+# Getting Content Agnet S3 csv from the aws system manager parameter store.
+# User Must have access to read this parameter.
+CONTENT_AGENT_S3_CSV_URL = get_parameter_value("CS_CONTENT_AGENT_S3_CSV_URL")
 
-# --- Agent wrapper ---
+
+# --- Agent wrapper making tools defined at one place ---
 def _tools_list() -> List[Any]:
     return [read_personalized_csv, analyze_hcps]
 
-
-agent = Agent(
+# Main Content Agent definition for HCP selection and analysis. 
+content_agent = Agent(
     system_prompt="""
     You are Content-Agent, an expert MOA & KOL engagement analyzer for healthcare professionals (HCPs).
 
@@ -58,33 +60,52 @@ agent = Agent(
     tools=_tools_list(),
 )
 
+
 # --- Runner ---
-def run_content_agent(query: str) -> List[Dict[str, Any]]:
-    print("Running Agent")
-    records = read_personalized_csv(url=CONTENT_AGENT_S3_CSV_URL or "")  # Use env var; fallback if empty
-    instruction = f"""
-    User query: {query}
-    HCP records provided: {json.dumps(records, indent=2)}  # Embedded for context; analyze directly.
-    Select relevant HCPs, analyze engagement, and output ranked JSON array.
+def run_content_agent(query: str,csv_content_limit :int=10) -> List[Dict[str, Any]]:
     """
+    Orchestrates the agent run such that the LLM is instructed to call:
+    read_personalized_csv(url=CONTENT_AGENT_S3_CSV_URL,csv_content_limit)
+     Args:
+       query: str : User Query that needs to be passed to LLM
+       csv_content_limit: limits the csv data to be passed to LLM, as it can break the LLM token limit
+
+    The Agent runtime is expected to execute that tool call and return records back
+    to the model. The model should then select HCPs and call analyze_hcps.
+    """
+    print("Running Content Agent (LLM-driven tool fetch)")
+    s3_url = CONTENT_AGENT_S3_CSV_URL or ""
+    if not s3_url:
+        raise RuntimeError("CONTENT_AGENT_S3_CSV_URL is not set. Provide an S3 URL or set the env/parameter.")
+    # Instruction: tell the model to call the tool first, and then to produce the final JSON.
+    instruction = f"""
+        S3_URL: {s3_url}
+        csv_content_limit: {csv_content_limit}
+
+        User query: {query}
+
+        REQUIREMENTS:
+        1) ALWAYS start by calling: read_personalized_csv(url=S3_URL,csv_content_limit=10).
+        - The runtime will execute that tool and return the full list of records back to you.
+        2) After the tool returns records, use those records to select the most relevant HCPs for the query.
+        3) Then call analyze_hcps(records, hcp_ids) with the selected hcp_ids.
+        4) Output ONLY the final analyzed JSON array (no extra commentary). Each item must be:
+        {{"hcp_id": str, "score": float, "rank": int, "reason": str, "details": dict}}
+
+        Constraints:
+        - Limit selection to 5–20 HCPs unless the user query explicitly requests otherwise.
+        - Use specialties, engagement flags, location, and kol video watch% as primary signals.
+        - Do NOT embed or echo the CSV back into the output; return only the final analyzed JSON array.
+        """
+
     try:
-        agent_result = agent(instruction, records=records)
+        agent_result = content_agent(instruction)
         text_out = getattr(agent_result, "text", None) or str(agent_result)
-        parsed = json.loads(text_out)
+        return json.loads(text_out)
+    
     except Exception as e:
-        print(f"Agent failed: {e}. Falling back to keyword-based selection.")
-        # Fallback: Keyword-based selection of HCP IDs (search across all record fields)
-        selected_hcp_ids = []
-        query_lower = query.lower()
-        for record in records:
-            record_text = ' '.join(str(v).lower() for v in record.values())
-            if query_lower in record_text:
-                hcp_id = record.get('hcp_id', '')
-                if hcp_id:
-                    selected_hcp_ids.append(str(hcp_id))
-        selected_hcp_ids = list(set(selected_hcp_ids))  # Deduplicate
-        parsed = analyze_hcps(records, selected_hcp_ids)
-    return parsed
+        raise RuntimeError(f"Content Agent run failed: {e}")
+
 
 if __name__ == "__main__":
     # Test Case 1: Query for HCPs with MOA email opens 

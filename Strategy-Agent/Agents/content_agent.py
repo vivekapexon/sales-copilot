@@ -7,8 +7,9 @@ from dotenv import load_dotenv
 load_dotenv()
 model = BedrockModel()
 from .Tools.content_agent_tool import *
+
 # Load S3-related environment variables
-content_agent_S3_csv_url = os.environ.get("CONTENT_AGENT_S3_CSV_URL")
+CONTENT_AGENT_S3_CSV_URL = os.environ.get("CONTENT_AGENT_S3_CSV_URL")
 aws_access_key_id = os.environ.get("AWS_ACCESS_KEY_ID")
 aws_secret_access_key = os.environ.get("AWS_SECRET_ACCESS_KEY")
 aws_region = os.environ.get("AWS_REGION")
@@ -18,33 +19,52 @@ aws_region = os.environ.get("AWS_REGION")
 def _tools_list() -> List[Any]:
     return [read_personalized_csv, analyze_hcps]
 
+
 agent = Agent(
-        system_prompt="""
-        You are Content-Agent, an expert MOA & KOL engagement analyzer for healthcare professionals (HCPs).
-        
-        Your role: Given a user query (e.g., "oncology specialists with high video engagement" or "HCPs who opened recent emails") and HCP records,
-        intelligently select the most relevant HCPs by filtering/matching query keywords, criteria, or patterns across record fields 
-        (e.g., specialty, name, location, moa_email_summary, kol_video_summary, engagement flags).
-        Prioritize semantic relevance: match specialties, engagement levels (e.g., "opened", "watched >50%"), or other attributes.
-        Limit selection to 5-20 HCPs unless query specifies otherwise to ensure focused analysis.
-        Then, analyze their engagement using available tools, scoring based on MOA opens/clicks and KOL video interactions.
-        
-        Process:
-        1. Review records for matches to query.
-        2. Extract relevant hcp_ids.
-        3. Use analyze_hcps tool to compute scores, ranks, and details.
-        4. Output ONLY a valid JSON array of analyzed HCPs, sorted by rank/score descending. 
-           Each item: {"hcp_id": str, "score": float, "rank": int, "reason": str, "details": dict}.
-        
-        Be precise, efficient, and ensure output is parseable JSON—no extra text.
-        """,
-        tools=_tools_list(),
-    )
+    system_prompt="""
+    You are Content-Agent, an expert MOA & KOL engagement analyzer for healthcare professionals (HCPs).
+
+    New requirement:
+    - ALWAYS start by calling the `read_personalized_csv` tool to load all HCP records.
+    - After the tool returns data, use these records for filtering, selection, and engagement analysis.
+
+    Your role:
+    Given a user query (e.g., "oncology specialists with high video engagement" or 
+    "HCPs who opened recent emails") and the loaded HCP records,
+    intelligently select the most relevant HCPs by filtering/matching query keywords,
+    criteria, or patterns across record fields 
+    (specialty, location, moa_email_summary, kol_video_summary, engagement flags).
+
+    Prioritize semantic relevance:
+    - specialties
+    - engagement levels (opened, clicked, watched >50%, etc.)
+    - region/location
+    - KOL or MOA behavior patterns
+
+    Limit selection to 5–20 HCPs unless the query specifies otherwise.
+
+    Process:
+    1. Call `read_personalized_csv` to load all HCP data.
+    2. Review the returned records to find relevant matches.
+    3. Extract relevant hcp_ids.
+    4. Call `analyze_hcps` with the selected hcp_ids to compute scores, ranks, and details.
+
+    Output:
+    - ONLY return a valid JSON array of analyzed HCPs sorted by score/rank descending.
+    - Each item must be: 
+      {"hcp_id": str, "score": float, "rank": int, "reason": str, "details": dict}
+
+    Important:
+    - No extra commentary or text outside the JSON.
+    - Must follow tool-calling protocol.
+    """,
+    tools=_tools_list(),
+)
 
 # --- Runner ---
 def run_content_agent(query: str) -> List[Dict[str, Any]]:
     print("Running Agent")
-    records = read_personalized_csv(url=content_agent_S3_csv_url or "")  # Use env var; fallback if empty
+    records = read_personalized_csv(url=CONTENT_AGENT_S3_CSV_URL or "")  # Use env var; fallback if empty
     instruction = f"""
     User query: {query}
     HCP records provided: {json.dumps(records, indent=2)}  # Embedded for context; analyze directly.

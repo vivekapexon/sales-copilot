@@ -1,19 +1,12 @@
 import json
 from typing import List, Any, Dict
-import os
 from strands import Agent
 from strands.models import BedrockModel
-from dotenv import load_dotenv
-load_dotenv()
 model = BedrockModel()
 from .Tools.content_agent_tool import *
+from .Tools.execute_redshift_sql import get_parameter_value
 
-# Load S3-related environment variables
-CONTENT_AGENT_S3_CSV_URL = os.environ.get("CONTENT_AGENT_S3_CSV_URL")
-aws_access_key_id = os.environ.get("AWS_ACCESS_KEY_ID")
-aws_secret_access_key = os.environ.get("AWS_SECRET_ACCESS_KEY")
-aws_region = os.environ.get("AWS_REGION")
-
+CONTENT_AGENT_S3_CSV_URL = get_parameter_value("CONTENT_AGENT_S3_CSV_URL")
 
 # --- Agent wrapper ---
 def _tools_list() -> List[Any]:

@@ -290,37 +290,44 @@ def create_competitive_agent() -> Agent:
 # ============================================================
 # SETUP — Load data from S3 once
 # ============================================================
-def run_competitive_setup_s3(bucket: str, key: str) -> Dict[str, Any]:
+def run_competitive_setup_s3():
     global GLOBAL_SIGNALS
-    GLOBAL_SIGNALS = []
 
-    fetch = fetch_competitive_data_s3(bucket=bucket, key=key)
+    # <<< No environment usage, no arguments >>>
+    BUCKET = "competitive-data-bucket"
+    KEY = "data/competitive_agent_final_data_set.csv"
+
+    # Fetch from S3
+    fetch = fetch_competitive_data_s3(bucket=BUCKET, key=KEY)
+
     if fetch.get("status") != "ok":
-        return fetch
+        return {"status": "error", "message": "Unable to load from S3"}
 
     rows = fetch["rows"]
     ref = fetch["ref"]
     source = fetch["source"]
 
     GLOBAL_SIGNALS = compute_signals_generic(rows, source, ref)
+
     return {
         "status": "ok",
         "loaded_rows": len(rows),
         "computed_signals": len(GLOBAL_SIGNALS),
-        "source": ref
+        "source": ref,
     }
+
 
 
 # ============================================================
 # MAIN — Strand auto prints, no print() needed
 # ============================================================
 if __name__ == "__main__":
-    BUCKET = os.environ.get("COMP_BUCKET", "competitive-data-bucket")
+    # BUCKET = os.environ.get("COMP_BUCKET", "competitive-data-bucket")
     # KEY = os.environ.get("COMP_KEY", "data/competitive_dataset_clean.csv")    #old data
-    KEY = os.environ.get("COMP_KEY", "data/competitive_agent_final_data_set.csv")      #new data
+    # KEY = os.environ.get("COMP_KEY", "data/competitive_agent_final_data_set.csv")      #new data
     print("Loading from S3...")
     
-    print(run_competitive_setup_s3(BUCKET, KEY))
+    print(run_competitive_setup_s3())
     agent = create_competitive_agent()
 
     # Strand will AUTO-PRINT the response. No print() needed.

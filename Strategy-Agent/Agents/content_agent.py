@@ -6,8 +6,8 @@ from strands.models import BedrockModel
 
 model = BedrockModel()
 # Importing external tools and helper functions
-from Tools.content_agent_tool import *
-from Tools.execute_redshift_sql import get_parameter_value
+from .Tools.content_agent_tool import read_personalized_csv, analyze_hcps
+from .Tools.execute_redshift_sql import get_parameter_value
 
 # Getting Content Agnet S3 csv from the aws system manager parameter store.
 # User Must have access to read this parameter.

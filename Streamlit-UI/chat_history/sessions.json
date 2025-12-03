@@ -1,0 +1,37 @@
+[
+  {
+    "session_id": "15be2534-0aa0-43bd-9562-0704a70d7236",
+    "created_at": "2025-12-03T18:11:04.287860",
+    "last_updated": "2025-12-03T18:32:25.118526",
+    "preview": "show me the details of HCP1001",
+    "message_count": 6
+  },
+  {
+    "session_id": "8e1713d2-71d1-479f-b7cc-93392b6070bc",
+    "created_at": "2025-12-03T18:45:06.557369",
+    "last_updated": "2025-12-03T19:00:47.730795",
+    "preview": "What is the objective and desired action/outcome f...",
+    "message_count": 8
+  },
+  {
+    "session_id": "6b062131-229a-4220-b2c3-2b8050f6614b",
+    "created_at": "2025-12-03T19:07:10.574228",
+    "last_updated": "2025-12-03T19:08:08.746162",
+    "preview": "Segment my HCPs into high, medium, and low priorit...",
+    "message_count": 2
+  },
+  {
+    "session_id": "226826a2-0d1e-45d2-b9cd-3ea3b8f84297",
+    "created_at": "2025-12-03T19:10:56.648689",
+    "last_updated": "2025-12-03T19:12:32.751048",
+    "preview": "My company has invented a new medicine for Diabete...",
+    "message_count": 2
+  },
+  {
+    "session_id": "e796cb11-d839-4cc0-ae65-09beb88df214",
+    "created_at": "2025-12-03T19:32:39.724806",
+    "last_updated": "2025-12-03T19:32:39.724806",
+    "preview": "",
+    "message_count": 0
+  }
+]

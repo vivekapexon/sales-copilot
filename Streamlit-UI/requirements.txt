@@ -1,0 +1,12 @@
+# Streamlit and UI dependencies
+streamlit>=1.28.0
+
+# Strategy Agent dependencies
+# Note: If strands fails to install on Windows due to DLL errors, try:
+# 1. pip install --upgrade pip setuptools wheel
+# 2. Install Visual C++ Redistributable: https://aka.ms/vs/17/release/vc_redist.x64.exe
+# 3. pip install strands --no-cache-dir
+strands
+
+# Utility dependencies
+python-dateutil>=2.8.2

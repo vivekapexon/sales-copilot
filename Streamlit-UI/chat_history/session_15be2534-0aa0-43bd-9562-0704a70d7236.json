@@ -1,0 +1,50 @@
+[
+  {
+    "role": "user",
+    "content": "show me the details of HCP1001",
+    "timestamp": "2025-12-03T18:11:17.483837",
+    "message_id": "1764765677.483949"
+  },
+  {
+    "role": "agent",
+    "content": {
+      "type": "text",
+      "content": "{\n    \"Agent\": \"ProfileAgent\",\n    \"hcp_id\": \"HCP1001\",\n    \"doctor_first_name\": \"Patricia\",\n    \"doctor_last_name\": \"Campbell\",\n    \"specialty_primary\": \"Oncology\",\n    \"subspecialty\": \"Medical Oncology\",\n    \"practice_setting\": \"Community Clinic\",\n    \"years_in_practice\": 28,\n    \"hco_id\": \"HCO2348\",\n    \"hco_type\": \"Hospital\",\n    \"hco_size_bucket\": \"-5\",\n    \"territory_id\": \"US-IN-S\",\n    \"hospital_affiliation_flag\": false,\n    \"kol_flag\": false,\n    \"degree_centrality\": 0.4602,\n    \"betweenness_centrality\": 0.7411,\n    \"closeness_centrality\": 0.2259,\n    \"peer_adoption_rate_90d\": 0.6329,\n    \"spillover_potential_index\": 1.1498,\n    \"distance_km_from_homebase\": 237.6,\n    \"drive_time_minutes\": 58.2,\n    \"morning_window_allowed_flag\": true,\n    \"afternoon_window_allowed_flag\": false,\n    \"clinic_saturday_open_flag\": false,\n    \"parking_difficulty_score\": 1,\n    \"sample_eligible_flag\": false,\n    \"max_calls_per_28d\": 10,\n    \"min_days_between_calls\": 10,\n    \"adverse_event_recent_flag\": false,\n    \"exclusion_list_flag\": false\n}\n"
+    },
+    "timestamp": "2025-12-03T18:11:50.224172",
+    "message_id": "1764765710.224194",
+    "agent_names": []
+  },
+  {
+    "role": "user",
+    "content": "can you show all details in proper tabular format ",
+    "timestamp": "2025-12-03T18:25:47.415228",
+    "message_id": "1764766547.415235"
+  },
+  {
+    "role": "agent",
+    "content": {
+      "type": "text",
+      "content": "## HCP1001 Complete Details\n\n### **HCP Profile Information**\n| Field | Value |\n|-------|-------|\n| HCP ID | HCP1001 |\n| Doctor Name | Dr. Patricia Campbell |\n| Specialty | Oncology (Medical Oncology) |\n| Practice Setting | Community Clinic |\n| Years in Practice | 28 years |\n| Hospital Affiliation | Yes (Hospital) |\n| KOL Status | No |\n| Territory | US-IN-S |\n\n**Summary**: Dr. Patricia Campbell is a seasoned medical oncologist with 28 years of experience practicing in a community clinic setting.\n\n### **Prescribing Performance**\n| Metric | 7 Days | 28 Days | 90 Days |\n|--------|---------|---------|---------|\n| Total Rx (TRx) | 4 | 54 | 80 |\n| New Rx (NRx) | 2 | 17 | 36 |\n| New-to-Brand Rx | - | 12 | - |\n| Share | - | 30.36% | 55.36% |\n| Share Change | - | -8.08% | - |\n| Growth (WoW/QoQ) | - | +5.45% | -5.52% |\n\n**Summary**: Strong prescribing volume with 55% share over 90 days, though experiencing some recent share decline.\n\n### **Access & Formulary Status**\n| Coverage Aspect | Details |\n|----------------|---------|\n| Overall Tier | Tier 2 |\n| Prior Auth Required | No |\n| Step Therapy Required | No |\n| Median Copay (90d) | $11.24 |\n| Top Payers | Medicare 5%, BCBS 33%, Humana 49% |\n| Access Alert Level | Low |\n| Coverage Status | UnitedHealth - Tier 2, $149 copay |\n\n**Summary**: Favorable access profile with low friction index (0.1174) and no prior authorization barriers.\n\n### **Recent Interactions**\n| Date | Type | Topic | Outcome | Follow-up |\n|------|------|--------|---------|-----------|\n| 2025-08-12 | Phone Call | KOL video follow-up | Rescheduled | Yes |\n\n| Engagement Metrics | Status |\n|-------------------|--------|\n| MOA Email Opened | No |\n| KOL Video Clicked | Yes |\n| Campaign Link Clicked | No |\n\n**Summary**: Limited recent interaction history with one phone call in August regarding KOL video content.\n\n### **Competitive Intelligence**\n| Metric | 60/90 Days |\n|--------|------------|\n| Competitor Details | 6 |\n| Competitor Samples | 13 |\n| Competitor Events | 1 |\n| Formulary Wins | None recent |\n| Competition Share | 69.56% |\n\n**Summary**: Moderate competitive pressure with 13 competitor samples dropped in 60 days.\n\n### **Action Items & Follow-up**\n| Action Type | Due Date | Owner | Status |\n|-------------|----------|--------|--------|\n| Schedule Follow-up | 2025-10-29 | Rep | Pending |\n| Log Samples | 2025-10-30 | Rep | Pending |\n| Submit PA Support | 2025-10-31 | Access Specialist | Pending |\n\n**Priority Score**: 21\n**Sample Request**: 3 samples requested\n**Hub Referral**: Yes\n\n### **Digital Engagement**\n| Metric | Value |\n|--------|-------|\n| Email Open Rate (60d) | 6.41% |\n| Content Click Rate (60d) | 20.46% |\n| Channel Preference | In-person (94.81%) |\n| Receptivity Score | 53.34 |\n\n### **Key Insights & Recommendations**\n- **High-value target**: 28 years experience, strong prescribing volume\n- **Access favorable**: Low copay burden and minimal barriers\n- **Prefers in-person**: Schedule face-to-face meetings\n- **Engaged with content**: Clicked KOL video, good content engagement\n- **Follow-up overdue**: Multiple pending action items from October\n"
+    },
+    "timestamp": "2025-12-03T18:28:21.416714",
+    "message_id": "1764766701.416723",
+    "agent_names": []
+  },
+  {
+    "role": "user",
+    "content": "Nice Thank You",
+    "timestamp": "2025-12-03T18:32:22.690699",
+    "message_id": "1764766942.690707"
+  },
+  {
+    "role": "agent",
+    "content": {
+      "type": "text",
+      "content": "You're welcome! I'm glad I could provide you with the comprehensive details for HCP1001 (Dr. Patricia Campbell) in a clear tabular format. \n\nIf you need any additional information about this HCP or want to explore other healthcare professionals, prescribing trends, access intelligence, or prepare for other calls, feel free to ask!\n"
+    },
+    "timestamp": "2025-12-03T18:32:25.055255",
+    "message_id": "1764766945.055272",
+    "agent_names": []
+  }
+]

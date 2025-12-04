@@ -353,6 +353,7 @@ Maintain JSON structure from each agent response.
 ============================================================
 STRICT NEGATIVE RULES (NON-NEGOTIABLE)
 ============================================================
+• Do not used other table from your end just follows agent execution and mentioned tables only.
 • Do NOT call agents outside the 6 listed above.
 • Do NOT call agents not required for the intent.
 • Do NOT add parameters tools don't support.
@@ -384,75 +385,30 @@ FAIL-SAFE LOGIC
 =======================================================================
 OUTPUT FORMAT (STRICT)
 ======================================================================= 
-OFor each executed tool, output in the EXACT structure below:
------------------------------------------------------------
+Always follow this exact strict output format:
 
-- Just prints the output comes from each agent call in JSON format.
-Example:
-    1. If ProfileAgent is called, output:
-        {{ 
-            "Agent": "ProfileAgent",
-           "<JUst Profile Agent exact JSON output>"
-        }}
-    2. If HistoryAgent is called, output:
-        - Base on user query, only include relevant fields in the output JSON.
-        Example: If user asks for interaction types and call dates,
-        return: {{
-                    "Agent": "HistoryAgent",
-                    "interaction_type": "Phone Call",
-                    "call_date": "2025-08-12"
-                }}
-        - Do NOT add any extra columns details,  commentary or explanation.
-    3. If PrescribingAgent is called, output:
-        {{
-            "Agent": "PrescribingAgent",
-            "HcpId": "<id>",
-            "Doctor Name":"<first_name, last_name>",
-            "Specialty":"<specialty>",
-            "Prescribing": {{
-            Total Prescriptions(volume): {{ Last 7 days (trx_7d), Last 28 days (trx_28d), Last 90 days (trx_90d) }},
-            New Prescriptions(new_rx): {{ Last 7 days (nrx_7d), Last 28 days (nrx_28d), Last 90 days (nrx_90d), New-to-Brand Prescriptions in last 28 days (nbrx_28d) }},
-            Direction & Speed of change Prescriptions (momentum): {{ Week-Over-Week % Change in TRx in last 28 days (Total Prescriptions) (trx_28d_wow_pct), Quarter-Over-Quarter % Change in TRx in last 90 days (trx_90d_qoq_pct), New-to-Brand Rate in last 28 days (nbrx_28d_rate) }},
-            Growth Potential (opportunity): {{ Gap to Monthly Prescription Goal (gap_to_goal_28d), Potential Uplift Score (potential_uplift_index) }},
-            Risk: {{ Probability the HCP will reduce or stop prescribing your brand in the next period (churn_risk_score), How open the HCP is expected to be to your next interaction (receptivity_score) }},
-            Brand adoption journey: "<adoption_stage_ordinal> (0: "Aware / Non-user", 1: "Considering", 2: "Trialing", 3: "Adopting", 4: "Champion", 5: "Regular User") Just print labels"
-            }} 
-        }}
-    4. If AccessAgent is called, output:
-        {{
-            "Agent": "AccessAgent",
-            "coverage_status": {{
-                "tier": <1-4 or null>,
-                "prior_auth_requirement": "<None/Some plans/All plans>",
-                "step_therapy_requirement": "<None/Some/All>",
-                "copay_median_usd": <float or null>,
-                "recent_change": "<Win/Loss/None>",
-                "alert_severity": "<None/Low/Medium/High>"
-            }},
-            "actionable_opportunities": [
-                "Specific action sales rep can take with context and numbers",
-                "Another actionable insight based on payer mix or barriers"
-            ],
-            "citation": {{
-                "source": "formulary_mart",
-                "primary_key": {{"column": "hcp_id", "value": "<actual_id>"}}
-            }}
-        }}
-    5. If CompetativeAgent is called, output:
-        {{
-            "Agent": "CompetativeAgent",
-            "json": {{ ... }},
-            "text": "human readable explanation"
-        }}
-    6. If ContentAgent is called, output:
-        {{
-            "Agent": "ContentAgent",
-            "json":{{...}},
-            "text": "human readable explanation"
-        }}
-- Do not add any extra information or explanation from your end like agent name on output just follow json output.
-- Do not modify the output from the agents.
-- DO NOT modify agent outputs. Return them as-is in JSON.
+1. SINGLE TABLE  
+   - Combine all agent/tool outputs into ONE table only.  
+   - Do not modify, summarize, or omit any values.  
+   - Do not print additional tables unless the user explicitly asks.  
+   - Do not add any explanation, metadata, or agent names.
+
+2. SUMMARY  
+   - Write a short summary ONLY based on the data in the table.  
+   - No external reasoning or added information.
+
+3. KEY INSIGHTS  
+   - Provide insights ONLY from the table and the user’s request.  
+   - Do not invent or add anything beyond the table content.
+
+Hard Rules:  
+- Do not print any symbols and signs.
+- Do not change or reinterpret tool outputs.  
+- Do not print anything except the required table → summary → insights.  
+- If user asks for tabular output, respond ONLY in table format.  
+- No extra commentary, no explanations, no additional sections.
+
+END.
 ----------------------------------------------------------------
 ========================================================================
 """
@@ -480,7 +436,7 @@ app = BedrockAgentCoreApp()
 # AgentCore Entrypoint
 # ----------------------
 @app.entrypoint
-def invoke(payload):
+def invoke(payload: dict = {}):
     """
     AgentCore-compatible entrypoint for Strategy Agent.
     
@@ -489,9 +445,9 @@ def invoke(payload):
         "prompt": "User's natural language query",
     }
     """
-    user_message = payload.get("prompt", "")
+    payload = payload.get("prompt", "What’s the most important thing to discuss with HCP1004?")
     
-    if not user_message:
+    if not payload:
         return {
             "error": "No prompt provided",
             "status": "missing_parameters",
@@ -499,7 +455,7 @@ def invoke(payload):
         }
     
     # Run the strategy agent with the user's query
-    agent_result = agent(user_message)
+    agent_result = agent(payload)
     
     return {
         "result": agent_result.message,
@@ -509,23 +465,12 @@ def invoke(payload):
         }
     }
 
-# ----------------------
-# Legacy function for backward compatibility
-# ----------------------
-def run_strategy_agent(nlq: str):
-    """
-    Legacy entry point - kept for backward compatibility.
-    1. Classify intent
-    2. Pass to agent with context
-    3. Return parsed result
-    """
-    instruction = nlq
-    agent_result = agent(instruction)
-    return agent_result
+
 
 # ----------------------
 # Example usage (local)
 # ----------------------
 if __name__ == "__main__":
     # Run with AgentCore runtime
+    # invoke()
     app.run()

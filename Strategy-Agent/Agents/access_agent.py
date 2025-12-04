@@ -7,15 +7,6 @@ from .Tools.execute_redshift_sql import execute_redshift_sql
 # ======================================================
 # 0) Redshift Serverless Config (Data API)
 # ======================================================
- 
-WORKGROUP = "sales-copilot-workgroup"
-DATABASE = "sales_copilot_db"
-SECRET_ARN = (
-    "arn:aws:secretsmanager:us-east-1:969385807621:secret:redshift!sales-copilot-namespace-sales_copilot_admin-seNjuJ"
-)
- 
-redshift_client = boto3.client("redshift-data", region_name="us-east-1")
-
 
 def get_schema_with_samples(table_name: str = "formulary_mart") -> str:
     """

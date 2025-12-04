@@ -15,7 +15,6 @@ BEDROCK_AGENTCORE_GATEWAY_ID=""
 AWS_REGION="us-east-1"
 WORKLOAD_NAME=""
 GATEWAY_TOOL_NAMES={
-    "connectSiteDB-Lambda": "connectSiteDB___connectSiteDB",
     "execute_redshift_sql": "execute_redshift_sql___execute_redshift_sql",
 }
 

@@ -1,13 +1,16 @@
 #structure agent.py
 import json
 import boto3
-import os
 from typing import Dict, Any
 from strands import tool
+from Tools.execute_redshift_sql import execute_redshift_sql
 import pandas as pd
 # AWS clients 
 s3 = boto3.client("s3")
 bedrock = boto3.client("bedrock-runtime", region_name= "us-east-1")
+
+# Set this to your transcripts table in Redshift
+TRANSCRIPT_TABLE = "public.voice_to_crm"  # <-- update to your actual schema.table
 
 TRANSCRIPTION_BUCKET = "sales-copilot-bucket"
 RESULT_BUCKET = "sales-copilot-bucket"
@@ -33,31 +36,68 @@ def save_structured_note(key: str, note: Dict[str, Any]) -> str:
 
 
 @tool
-def load_hcp_data_from_s3(hcp_id: str) -> str:
+def load_hcp_data_from_redshift(hcp_id: str) -> str:
     """
-    Load a CSV file from Amazon S3 bucket and return the data row for the specified HCP ID as JSON string.
-    
+    Load a transcript row from Redshift for the specified HCP ID and return it as a JSON string.
+
+    Behavior:
+      - Queries Redshift using the execute_redshift_sql tool.
+      - Returns a JSON string of the first matching row (or an error JSON).
+      - Keep TRANSCRIPT_TABLE updated to the correct schema.table.
+
     Args:
         hcp_id: The HCP ID to filter and retrieve the specific row for.
-    
-    Returns:
-        The row data as a JSON string, or an error message if not found.
-    """
 
-    print(f"Loading CSV from s3://{CSV_BUCKET}/{S3_DEMO_TRASNCRPTION_JSON_FILE} and filtering for HCP ID: {hcp_id}")
+    Returns:
+        JSON string: either the row dict or {"error": "..."}.
+    """
+    # Basic sanitization to reduce risk of SQL injection; prefer parameterized execution if available
+    if hcp_id is None:
+        return json.dumps({"error": "hcp_id is required"})
+
+    # Escape single quotes (simple mitigation)
+    safe_hcp_id = str(hcp_id).replace("'", "''")
+
+    sql = f"""
+    SELECT *
+    FROM {TRANSCRIPT_TABLE}
+    WHERE hcp_id = '{safe_hcp_id}'
+    LIMIT 1;
+    """.strip()
+
+    print(f"Querying Redshift table {TRANSCRIPT_TABLE} for HCP ID: {hcp_id}")
 
     try:
-        obj = s3.get_object(Bucket=CSV_BUCKET, Key=S3_DEMO_TRASNCRPTION_JSON_FILE)
-        df = pd.read_csv(obj["Body"])
-        
-        row = df[df['hcp_id'] == hcp_id]
-        
-        if row.empty:
-            return json.dumps({"error": f"No row found for HCP ID: {hcp_id}"})
-        row_data = row.iloc[0].to_dict()
-        return json.dumps(row_data)
-
+        resp = execute_redshift_sql(sql, return_results=True)
     except Exception as e:
-        print(f"Error loading or processing CSV: {str(e)}")
-        return json.dumps({"error": f"Failed to load data: {str(e)}"})
-    
+        return json.dumps({"error": f"execute_redshift_sql call failed: {str(e)}"})
+
+    # Resp expected shape: {"status":"finished","rows":[{col:val,...}, ...], ...} or error structure
+    if not isinstance(resp, dict):
+        return json.dumps({"error": "Unexpected response from execute_redshift_sql"})
+
+    status = resp.get("status")
+    if status != "finished":
+        # pass along error/message if present
+        msg = resp.get("message", f"Redshift statement status: {status}")
+        return json.dumps({"error": msg})
+
+    rows = resp.get("rows", [])
+    if not rows:
+        return json.dumps({"error": f"No row found for HCP ID: {hcp_id}"})
+
+    # Return the first matching row (to mirror the original S3 loader behavior)
+    row_data = rows[0]
+
+    # Ensure JSON-serializable values (convert non-serializable to strings)
+    try:
+        json.dumps(row_data)  # quick test
+    except TypeError:
+        # convert problematic values to strings
+        for k, v in list(row_data.items()):
+            try:
+                json.dumps(v)
+            except TypeError:
+                row_data[k] = str(v)
+
+    return json.dumps(row_data)

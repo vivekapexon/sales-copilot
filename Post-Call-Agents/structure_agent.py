@@ -1,7 +1,7 @@
 #structure agent.py
 import json
 from strands import Agent
-from Tools.structure_agent_tools import save_structured_note, load_hcp_data_from_s3
+from Tools.structure_agent_tools import save_structured_note, load_hcp_data_from_redshift
 
 # Define the agent
 call_structure_agent = Agent(
@@ -71,9 +71,8 @@ Workflow (strict):
 
 Remember: Valid JSON only. No additional text.
 """,
-    tools=[load_hcp_data_from_s3, save_structured_note]
+    tools=[load_hcp_data_from_redshift, save_structured_note]
 )
-
 
 def process_transcription(query:str):
     """Main function: s3 transcrpition → get transcrption JSON from S3

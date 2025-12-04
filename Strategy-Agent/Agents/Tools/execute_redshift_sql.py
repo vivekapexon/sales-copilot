@@ -17,7 +17,7 @@ def get_parameter_value(parameter_name):
           get_parameter_value("EDC_DATA_BUCKET") -> returns the S3 bucket name used for EDC files.
     """
     try:
-        ssm_client = boto3.client("ssm")
+        ssm_client = boto3.client("ssm", region_name="us-east-1")
         response = ssm_client.get_parameter(Name=parameter_name, WithDecryption=True)
         return response["Parameter"]["Value"]
     except Exception as e:
@@ -49,7 +49,7 @@ def execute_redshift_sql(sql_query: str, return_results: bool = True) -> Dict[st
     - sql_query: SQL string to execute (caller is responsible for safety/validation).
     - return_results: when False, only returns execution status.
     """
-    client = boto3.client("redshift-data")
+    client = boto3.client("redshift-data", region_name="us-east-1")
     try:
         resp = client.execute_statement(
             WorkgroupName=WORKGROUP,

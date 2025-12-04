@@ -1,47 +1,32 @@
 import json
 from strands import Agent
 from .Tools.execute_redshift_sql import execute_redshift_sql
+import boto3
 
 # ----------------------
 # Configuration 
 # ----------------------
-DATABASE = "sales_copilot_db"
 DEFAULT_SQL_LIMIT = 1000
 
+def get_parameter_value(parameter_name):
+    """Fetch an individual parameter by name from AWS Systems Manager Parameter Store.
 
-# ----------------------
-# Allowed columns list (exact names from your table)
-# ----------------------
-ALLOWED_COLUMNS = [
-    "hcp_id","doctor_first_name","doctor_last_name",
-    "hco_id","territory_id","as_of_date","specialty_primary","subspecialty","practice_setting",
-    "years_in_practice","hco_type","hco_size_bucket","hospital_affiliation_flag","kol_flag",
-    "trx_7d","trx_28d","trx_90d","nrx_7d","nrx_28d","nrx_90d","nbrx_28d",
-    "share_28d","share_90d","trx_28d_wow_pct","trx_90d_qoq_pct","share_28d_delta","nbrx_28d_rate",
-    "comp_trx_share_28d","comp_share_28d_delta",
-    "comp_detail_60d_cnt","comp_sample_60d_cnt","comp_event_90d_cnt","comp_formulary_win_30d_flag",
-    "formulary_tier_score","prior_auth_required_flag","step_therapy_required_flag",
-    "avg_time_to_fill_days_90d","patient_copay_median_90d","access_change_14d_flag","access_friction_index",
-    "payer_top1_share_pct","payer_top3_share_pct",
-    "calls_90d_cnt","meetings_90d_cnt","last_contact_days_ago",
-    "meeting_accept_rate_90d","email_open_rate_60d","content_click_rate_60d",
-    "sample_requests_90d_cnt","event_attendance_180d_cnt",
-    "channel_pref_virtual_prob","channel_pref_inperson_prob",
-    "monthly_goal_trx","gap_to_goal_28d","potential_uplift_index","launch_cohort_flag",
-    "adoption_stage_ordinal","receptivity_score","churn_risk_score",
-    "degree_centrality","betweenness_centrality","closeness_centrality",
-    "peer_adoption_rate_90d","spillover_potential_index",
-    "distance_km_from_homebase","drive_time_minutes",
-    "morning_window_allowed_flag","afternoon_window_allowed_flag","clinic_saturday_open_flag",
-    "parking_difficulty_score","sample_eligible_flag",
-    "max_calls_per_28d","min_days_between_calls",
-    "adverse_event_recent_flag","exclusion_list_flag",
-    "weekofyear_sin","weekofyear_cos","month_sin","month_cos","recent_holiday_flag",
-    "dow_1","dow_2","dow_3","dow_4","dow_5","dow_6","dow_7",
-    "access_policy_change_7d_flag","payer_contract_change_30d_flag","competitor_launch_60d_flag","new_clinical_study_30d_flag",
-    "rep_capacity_remaining_7d","travel_budget_remaining_28d","scheduled_calls_next_7d_cnt",
-    "prescribing_freshness_days","access_freshness_days","engagement_freshness_days","feature_completeness_pct"
-]
+    Returns:
+        str or None: The parameter value (decrypted if needed) or None on error.
+
+    Notes:
+      - This helper reads configuration from SSM Parameter Store. Example usage in this module:
+          get_parameter_value("EDC_DATA_BUCKET") -> returns the S3 bucket name used for EDC files.
+    """
+    try:
+        ssm_client = boto3.client("ssm")
+        response = ssm_client.get_parameter(Name=parameter_name, WithDecryption=True)
+        return response["Parameter"]["Value"]
+    except Exception as e:
+        print(f"Error fetching parameter {parameter_name}: {str(e)}")
+        return None
+
+ALLOWED_COLUMNS = get_parameter_value("SC_HCP_SCHEMA_COLUMNS")
 
 # ----------------------
 # Agent prompt: instructs how to build SQL from NLQ and what final JSON to produce
@@ -51,7 +36,7 @@ You are the PrescribingAgent.
 
 Your job: given a natural-language query (NLQ) about prescribing or a request to "prepare prescribing intelligence" for an HCP,
 you must:
-  1) Convert the NLQ to a single, safe SQL statement that queries the Redshift Serverless table `healthcare_data` in database `{DATABASE}`.
+  1) Convert the NLQ to a single, safe SQL statement that queries the Redshift Serverless table `healthcare_data`.
   2) Use ONLY the allowed columns list embedded in your prompt (no other columns, no metadata).
   3) Always include a LIMIT clause when fetching multiple rows (use LIMIT {DEFAULT_SQL_LIMIT} unless NLQ specifies otherwise).
   4) Call the tool `execute_redshift_sql(sql_query, return_results=True)` to execute the SQL.
@@ -161,8 +146,4 @@ if __name__ == "__main__":
     # quick manual test: replace with the NLQ you want
     nlq_example = input("Enter your prompt: ")
     out = run_prescribing_agent(nlq_example)
-    # print(json.dumps(out, indent=2))
-    # sql_query = "SELECT * FROM healthcare_data WHERE doctor_first_name = 'Ashley'"
-    # print(sql_query)
-    # out = execute_redshift_sql(sql_query)
-    # print(out)
+    

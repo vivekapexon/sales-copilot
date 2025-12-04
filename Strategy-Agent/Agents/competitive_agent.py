@@ -322,9 +322,6 @@ def run_competitive_setup_s3():
 # MAIN — Strand auto prints, no print() needed
 # ============================================================
 if __name__ == "__main__":
-    # BUCKET = os.environ.get("COMP_BUCKET", "competitive-data-bucket")
-    # KEY = os.environ.get("COMP_KEY", "data/competitive_dataset_clean.csv")    #old data
-    # KEY = os.environ.get("COMP_KEY", "data/competitive_agent_final_data_set.csv")      #new data
     print("Loading from S3...")
     
     print(run_competitive_setup_s3())

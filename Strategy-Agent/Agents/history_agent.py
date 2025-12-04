@@ -32,7 +32,6 @@ redshift_client = boto3.client("redshift-data", region_name="us-east-1")
  
 # ======================================================
 schema_description = """
-Table: history_mart
  
 Columns:
 - hcp_id                       VARCHAR      -- e.g., 'HCP1000'

@@ -1,11 +1,112 @@
-import json
+import sys
+import logging
 from strands import Agent
+from bedrock_agentcore import BedrockAgentCoreApp
 from Agents import profile_agent
 from Agents import prescribe_agent
 from Agents import history_agent
-from Agents import access_agent
+from Agents import access_agent 
 from Agents import competitive_agent
 from Agents import content_agent
+
+logger = logging.getLogger(__name__)
+
+AWS_REGION = "us-east-1"
+WORKLOAD_NAME="sales-copilot"
+DOCKER_CONTAINER="0"
+
+try:
+    from utils.gateway_client import TokenManager, start_background_token_refresh
+
+    # Create centralized token manager
+    token_manager = TokenManager(
+        region=AWS_REGION,
+        workload_name=WORKLOAD_NAME
+    )
+
+    # Initialize workload token (this also sets it in BedrockAgentCoreContext)
+    workload_token = token_manager.get_workload_token()
+
+    logger.info(
+        "Workload access token initialized successfully",
+        extra={
+            "token_length": len(workload_token),
+            "operation": "token_manager_init",
+            "status": "success"
+        }
+    )
+    sys.stdout.flush()
+    sys.stderr.flush()
+
+    # Proactively fetch M2M token to verify authentication is working
+    logger.info(
+        "Fetching M2M token to verify authentication",
+        extra={"operation": "m2m_token_init"}
+    )
+    sys.stdout.flush()
+    sys.stderr.flush()
+
+    m2m_token = token_manager.get_m2m_token()
+
+    logger.info(
+        "M2M token fetched successfully",
+        extra={
+            "token_length": len(m2m_token),
+            "operation": "m2m_token_init",
+            "status": "success"
+        }
+    )
+    sys.stdout.flush()
+    sys.stderr.flush()
+
+    # Start background token refresh for long-running workflows
+    logger.info(
+        "Starting background token refresh for long-running workflows",
+        extra={"operation": "token_refresh_init"}
+    )
+    sys.stdout.flush()
+    sys.stderr.flush()
+
+    start_background_token_refresh(token_manager)
+
+    logger.info(
+        "Background token refresh started - tokens will be automatically refreshed",
+        extra={
+            "operation": "token_refresh_init",
+            "status": "success",
+            "note": "Workflow can run for extended periods"
+        }
+    )
+    sys.stdout.flush()
+    sys.stderr.flush()
+
+except Exception as e:
+    logger.error(
+        "Failed to initialize token management",
+        extra={
+            "error_type": type(e).__name__,
+            "operation": "token_manager_init",
+            "status": "failed",
+            "troubleshooting": [
+                "Verify AWS credentials are configured",
+                "Check WORKLOAD_NAME in .env",
+                "Check AGENTCORE_PROVIDER_NAME and AGENTCORE_SCOPES in .env",
+                "Ensure OAuth provider exists in AgentCore Identity",
+                "Verify Gateway targets are configured correctly"
+            ]
+        },
+        exc_info=True
+    )
+    sys.stdout.flush()
+    sys.stderr.flush()
+
+    if DOCKER_CONTAINER == "1":
+        raise RuntimeError(
+            "Token management initialization failed. Ensure AWS credentials and "
+            "environment variables are properly configured."
+        ) from e
+    else:
+        raise RuntimeError(f"Token management initialization failed: {str(e)}") from e
 
 
 # ----------------------
@@ -371,14 +472,49 @@ def create_strategy_agent():
         tools=_tools_list(),
     )
 
+# Initialize the agent and app
 agent = create_strategy_agent()
+app = BedrockAgentCoreApp()
 
 # ----------------------
-# Runner
+# AgentCore Entrypoint
+# ----------------------
+@app.entrypoint
+def invoke(payload):
+    """
+    AgentCore-compatible entrypoint for Strategy Agent.
+    
+    Expected payload format:
+    {
+        "prompt": "User's natural language query",
+    }
+    """
+    user_message = payload.get("prompt", "")
+    
+    if not user_message:
+        return {
+            "error": "No prompt provided",
+            "status": "missing_parameters",
+            "required": ["prompt"]
+        }
+    
+    # Run the strategy agent with the user's query
+    agent_result = agent(user_message)
+    
+    return {
+        "result": agent_result.message,
+        "metadata": {
+            "agent": "StrategyAgent",
+            "tools_available": ["ProfileAgent", "HistoryAgent", "PrescribingAgent", "AccessAgent", "CompetitiveAgent", "ContentAgent"]
+        }
+    }
+
+# ----------------------
+# Legacy function for backward compatibility
 # ----------------------
 def run_strategy_agent(nlq: str):
     """
-    Main entry point.
+    Legacy entry point - kept for backward compatibility.
     1. Classify intent
     2. Pass to agent with context
     3. Return parsed result
@@ -390,7 +526,6 @@ def run_strategy_agent(nlq: str):
 # ----------------------
 # Example usage (local)
 # ----------------------
-if __name__ == "__main__":    
-    # Run actual agent
-    user_prompt = input("Enter your prompt: ")
-    result = run_strategy_agent(user_prompt)
+if __name__ == "__main__":
+    # Run with AgentCore runtime
+    app.run()

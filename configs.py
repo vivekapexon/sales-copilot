@@ -1,10 +1,10 @@
-AGENTCORE_PROVIDER_NAME ="resource-provider-oauth-client-0yufi"
-AGENTCORE_SCOPES=["default-m2m-resource-server-lnazi1/read", "default-m2m-resource-server-lnazi1/write"]
-BEDROCK_AGENTCORE_GATEWAY_ID=""
+AGENTCORE_PROVIDER_NAME ="SalesCopilotAgentCoreIdentityStartProvider"
+AGENTCORE_SCOPES=["default-m2m-resource-server-1dvnkv/read"]
+BEDROCK_AGENTCORE_GATEWAY_ID="salescopilot-gateway-rojqbvznme"
 AWS_REGION="us-east-1"
 WORKLOAD_NAME="sales_statergy_copilot_identity"
 GATEWAY_TOOL_NAMES={
-    "execute_redshift_sql": "execute_redshift_sql___execute_redshift_sql",
+    "execute_redshift_sql": "LambdaTarget___LambdaTarget",
 }
 
 TOKEN_EXPIRY_SECONDS=3300

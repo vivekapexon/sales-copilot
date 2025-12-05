@@ -6,34 +6,26 @@ import time
 import threading
 from typing import Dict, Any, Optional
 from bedrock_agentcore.identity.auth import requires_access_token
+from configs import (
+    AGENTCORE_PROVIDER_NAME,
+    AGENTCORE_SCOPES,
+    BEDROCK_AGENTCORE_GATEWAY_ID,
+    AWS_REGION,
+    WORKLOAD_NAME,
+    GATEWAY_TOOL_NAMES,
+    TOKEN_EXPIRY_SECONDS,
+    TOKEN_REFRESH_BUFFER_SECONDS,
+    MAX_BACKOFF_SECONDS,
+    DEFAULT_RATE_LIMIT_TPS,
+    DEFAULT_RATE_LIMIT_BURST,
+    DEFAULT_MAX_RETRIES,
+    GATEWAY_MAX_RETRIES,
+    HTTP_UNAUTHORIZED,
+    HTTP_FORBIDDEN,
+    HTTP_TOO_MANY_REQUESTS,
+)
 
 logger = logging.getLogger(__name__)
-
-AGENTCORE_PROVIDER_NAME ="resource-provider-oauth-client-0yufi"
-AGENTCORE_SCOPES=["default-m2m-resource-server-lnazi1/read", "default-m2m-resource-server-lnazi1/write"]
-BEDROCK_AGENTCORE_GATEWAY_ID=""
-AWS_REGION="us-east-1"
-WORKLOAD_NAME=""
-GATEWAY_TOOL_NAMES={
-    "execute_redshift_sql": "execute_redshift_sql___execute_redshift_sql",
-}
-
-TOKEN_EXPIRY_SECONDS=3300
-TOKEN_REFRESH_BUFFER_SECONDS=300
-MAX_BACKOFF_SECONDS = 30  # Maximum backoff time for retries
-# Rate limiting defaults
-DEFAULT_RATE_LIMIT_TPS = 10.0  # Transactions per second
-DEFAULT_RATE_LIMIT_BURST = 20  # Burst capacity
-# Retry configuration
-DEFAULT_MAX_RETRIES = 3
-GATEWAY_MAX_RETRIES = 5  # For Gateway calls (more retries for long-running workflows)
-
-# HTTP status codes
-HTTP_UNAUTHORIZED = 401
-HTTP_FORBIDDEN = 403
-HTTP_TOO_MANY_REQUESTS = 429
-
-
 
 
 def get_gateway_tool_name(internal_name: str) -> str:
@@ -237,7 +229,7 @@ class TokenManager:
                 "operation": "token_manager_init",
                 "region": region,
                 "workload_name": workload_name,
-            }
+            },
         )
 
     @property
@@ -245,6 +237,7 @@ class TokenManager:
         """Lazy initialization of IdentityClient."""
         if self._identity_client is None:
             from bedrock_agentcore.services.identity import IdentityClient
+
             self._identity_client = IdentityClient(self.region)
         return self._identity_client
 
@@ -268,25 +261,32 @@ class TokenManager:
             RuntimeError: If token fetch fails
         """
         with self._lock:
-            if force_refresh or self._is_token_expiring_soon(self._workload_token_expiry):
+            if force_refresh or self._is_token_expiring_soon(
+                self._workload_token_expiry
+            ):
                 try:
                     logger.info(
                         "Fetching workload access token",
                         extra={
                             "operation": "workload_token_fetch",
                             "force_refresh": force_refresh,
-                        }
+                        },
                     )
 
                     response = self.identity_client.get_workload_access_token(
                         workload_name=self.workload_name
                     )
-                    self._workload_token = response['workloadAccessToken']
+                    self._workload_token = response["workloadAccessToken"]
                     self._workload_token_expiry = time.time() + TOKEN_EXPIRY_SECONDS
 
                     # Update BedrockAgentCoreContext for @requires_access_token decorator
-                    from bedrock_agentcore.runtime.context import BedrockAgentCoreContext
-                    BedrockAgentCoreContext.set_workload_access_token(self._workload_token)
+                    from bedrock_agentcore.runtime.context import (
+                        BedrockAgentCoreContext,
+                    )
+
+                    BedrockAgentCoreContext.set_workload_access_token(
+                        self._workload_token
+                    )
 
                     logger.info(
                         "Workload access token fetched successfully",
@@ -294,10 +294,10 @@ class TokenManager:
                             "operation": "workload_token_fetch",
                             "status": "success",
                             "expires_at": time.strftime(
-                                '%Y-%m-%d %H:%M:%S',
-                                time.localtime(self._workload_token_expiry)
+                                "%Y-%m-%d %H:%M:%S",
+                                time.localtime(self._workload_token_expiry),
                             ),
-                        }
+                        },
                     )
                 except Exception as e:
                     logger.error(
@@ -307,7 +307,7 @@ class TokenManager:
                             "status": "failed",
                             "error_type": type(e).__name__,
                         },
-                        exc_info=True
+                        exc_info=True,
                     )
                     raise RuntimeError(f"Workload token fetch failed: {e}") from e
 
@@ -329,7 +329,9 @@ class TokenManager:
         # Check if refresh is needed (with lock)
         needs_refresh = False
         with self._lock:
-            needs_refresh = force_refresh or self._is_token_expiring_soon(self._m2m_token_expiry)
+            needs_refresh = force_refresh or self._is_token_expiring_soon(
+                self._m2m_token_expiry
+            )
             if not needs_refresh:
                 return self._m2m_token
 
@@ -340,7 +342,7 @@ class TokenManager:
                 extra={
                     "operation": "m2m_token_fetch",
                     "force_refresh": force_refresh,
-                }
+                },
             )
 
             # Ensure workload token is fresh before fetching M2M token
@@ -362,10 +364,9 @@ class TokenManager:
                     "status": "success",
                     "token_length": len(new_token),
                     "expires_at": time.strftime(
-                        '%Y-%m-%d %H:%M:%S',
-                        time.localtime(self._m2m_token_expiry)
+                        "%Y-%m-%d %H:%M:%S", time.localtime(self._m2m_token_expiry)
                     ),
-                }
+                },
             )
 
             return new_token
@@ -378,7 +379,7 @@ class TokenManager:
                     "status": "failed",
                     "error_type": type(e).__name__,
                 },
-                exc_info=True
+                exc_info=True,
             )
             raise RuntimeError(f"M2M token fetch failed: {e}") from e
 
@@ -406,7 +407,7 @@ class TokenManager:
         self.get_m2m_token(force_refresh=True)
         logger.info(
             "All tokens refreshed successfully",
-            extra={"operation": "token_refresh_all", "status": "success"}
+            extra={"operation": "token_refresh_all", "status": "success"},
         )
 
     def clear_tokens(self) -> None:
@@ -561,7 +562,7 @@ def _background_token_refresh_worker():
 
     logger.info(
         "Background token refresh worker started",
-        extra={"operation": "background_token_refresh", "status": "started"}
+        extra={"operation": "background_token_refresh", "status": "started"},
     )
 
     while not _token_refresh_stop_event.is_set():
@@ -573,7 +574,7 @@ def _background_token_refresh_worker():
                     _global_token_manager.get_m2m_token()
                     logger.debug(
                         "Background token check completed",
-                        extra={"operation": "background_token_refresh"}
+                        extra={"operation": "background_token_refresh"},
                     )
                 except Exception as e:
                     logger.error(
@@ -583,7 +584,7 @@ def _background_token_refresh_worker():
                             "status": "failed",
                             "error_type": type(e).__name__,
                         },
-                        exc_info=True
+                        exc_info=True,
                     )
 
             # Wait 60 seconds before next check (or until stop event is set)
@@ -597,13 +598,13 @@ def _background_token_refresh_worker():
                     "status": "error",
                     "error_type": type(e).__name__,
                 },
-                exc_info=True
+                exc_info=True,
             )
             _token_refresh_stop_event.wait(timeout=60)
 
     logger.info(
         "Background token refresh worker stopped",
-        extra={"operation": "background_token_refresh", "status": "stopped"}
+        extra={"operation": "background_token_refresh", "status": "stopped"},
     )
 
 
@@ -626,7 +627,7 @@ def start_background_token_refresh(token_manager: Optional[TokenManager] = None)
     if _token_refresh_thread is not None and _token_refresh_thread.is_alive():
         logger.debug(
             "Background token refresh worker already running",
-            extra={"operation": "background_token_refresh"}
+            extra={"operation": "background_token_refresh"},
         )
         return
 
@@ -637,7 +638,7 @@ def start_background_token_refresh(token_manager: Optional[TokenManager] = None)
     _token_refresh_thread.start()
     logger.info(
         "Background token refresh worker started",
-        extra={"operation": "background_token_refresh", "status": "success"}
+        extra={"operation": "background_token_refresh", "status": "success"},
     )
 
 
@@ -652,20 +653,20 @@ def stop_background_token_refresh():
     if _token_refresh_thread is None or not _token_refresh_thread.is_alive():
         logger.debug(
             "Background token refresh worker not running",
-            extra={"operation": "background_token_refresh"}
+            extra={"operation": "background_token_refresh"},
         )
         return
 
     logger.info(
         "Stopping background token refresh worker",
-        extra={"operation": "background_token_refresh"}
+        extra={"operation": "background_token_refresh"},
     )
     _token_refresh_stop_event.set()
     _token_refresh_thread.join(timeout=5)
     _token_refresh_thread = None
     logger.info(
         "Background token refresh worker stopped",
-        extra={"operation": "background_token_refresh", "status": "success"}
+        extra={"operation": "background_token_refresh", "status": "success"},
     )
 
 
@@ -731,7 +732,7 @@ class GatewayClient:
                 "operation": "gateway_client_init",
                 "gateway_id": self.gateway_id,
                 "region": self.region,
-            }
+            },
         )
 
     def _get_auth_headers(self, force_refresh: bool = False) -> Dict[str, str]:
@@ -761,7 +762,7 @@ class GatewayClient:
                     "status": "failed",
                     "error_type": type(e).__name__,
                 },
-                exc_info=True
+                exc_info=True,
             )
             raise RuntimeError(f"Failed to get auth headers: {str(e)}") from e
 
@@ -785,14 +786,14 @@ class GatewayClient:
                 "operation": "token_refresh",
                 "attempt": attempt + 1,
                 "max_retries": max_retries,
-            }
+            },
         )
 
         try:
             self.token_manager.refresh_all_tokens()
             logger.info(
                 "Tokens refreshed successfully",
-                extra={"operation": "token_refresh", "status": "success"}
+                extra={"operation": "token_refresh", "status": "success"},
             )
         except Exception as refresh_error:
             logger.warning(
@@ -802,14 +803,14 @@ class GatewayClient:
                     "status": "failed",
                     "error_type": type(refresh_error).__name__,
                 },
-                exc_info=True
+                exc_info=True,
             )
 
         # Wait before retry
         backoff_time = calculate_backoff_time(attempt)
         logger.info(
             f"Waiting {backoff_time}s before retry",
-            extra={"operation": "retry_backoff", "backoff_seconds": backoff_time}
+            extra={"operation": "retry_backoff", "backoff_seconds": backoff_time},
         )
         time.sleep(backoff_time)
 
@@ -1234,8 +1235,7 @@ def get_gateway_client(token_manager: Optional[TokenManager] = None) -> GatewayC
     if token_manager is None and _singleton_token_manager is None:
         _singleton_token_manager = TokenManager()
         logger.info(
-            "Created singleton TokenManager",
-            extra={"operation": "gateway_client_init"}
+            "Created singleton TokenManager", extra={"operation": "gateway_client_init"}
         )
 
     # Use provided token manager or singleton
@@ -1246,7 +1246,7 @@ def get_gateway_client(token_manager: Optional[TokenManager] = None) -> GatewayC
         _gateway_client_instance = GatewayClient(token_manager=tm)
         logger.info(
             "Created singleton GatewayClient",
-            extra={"operation": "gateway_client_init"}
+            extra={"operation": "gateway_client_init"},
         )
 
     return _gateway_client_instance

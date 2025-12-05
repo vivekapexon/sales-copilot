@@ -8,12 +8,10 @@ from Agents import history_agent
 from Agents import access_agent 
 from Agents import competitive_agent
 from Agents import content_agent
-
+from configs import AWS_REGION, WORKLOAD_NAME, DOCKER_CONTAINER
 logger = logging.getLogger(__name__)
 
-AWS_REGION = "us-east-1"
-WORKLOAD_NAME="sales-copilot"
-DOCKER_CONTAINER="0"
+
 
 try:
     from utils.gateway_client import TokenManager, start_background_token_refresh

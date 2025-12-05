@@ -1,0 +1,22 @@
+# Core dependencies
+pandas
+
+# Strands Agent framework
+strands-agents
+
+# AgentCore Runtime
+# bedrock-agentcore-runtime
+bedrock-agentcore
+bedrock-agentcore-starter-toolkit
+
+
+# AWS SDK
+boto3
+botocore
+
+# Database connectivity (for Redshift)
+psycopg2-binary
+sqlalchemy
+
+# Additional utilities
+python-dotenv

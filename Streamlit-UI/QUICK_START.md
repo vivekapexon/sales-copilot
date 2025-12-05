@@ -58,6 +58,7 @@ For more solutions, see `TROUBLESHOOTING.md`
 ---
 
 ## 💬 Using the App
+Select between Post/Pre Call using the toggle given on left side.
 
 ### Example Queries
 
@@ -86,6 +87,11 @@ Which plans cover our product for Dr. Rao?
 What are competitors doing around Dr. Sharma?
 ```
 
+**Sentiment Analsis:**
+```
+how did the doctor with hcp id HCP1001 feel after the recent interaction with sales person.
+```
+
 ### Features
 
 ✅ **Chat History** - All conversations are saved  
@@ -108,7 +114,9 @@ What are competitors doing around Dr. Sharma?
 ├── QUICK_START.md               # This file
 ├── chat_history/                # Saved conversations
 ├── utils/                       # Helper modules
-└── Strategy-Agent/              # Agent system
+└── post_call/                   # Post Call Agent system
+    ├── supervisor_agent.py        # Real agent
+└── Strategy_Agent/              # Agent system
     ├── strategy_agent.py        # Real agent
     └── mock_strategy_agent.py   # Mock agent (fallback)
 ```

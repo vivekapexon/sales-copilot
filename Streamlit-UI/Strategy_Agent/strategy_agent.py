@@ -1,11 +1,12 @@
+#/Strategy_Agent/strategy_agent.py
 import json
 from strands import Agent
-from Agents import profile_agent
-from Agents import prescribe_agent
-from Agents import history_agent
-from Agents import access_agent
-from Agents import competitive_agent
-from Agents import content_agent
+from .Agents import profile_agent
+from .Agents import prescribe_agent
+from .Agents import history_agent
+from .Agents import access_agent
+from .Agents import competitive_agent
+from .Agents import content_agent
 
 
 # ----------------------

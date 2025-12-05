@@ -10,15 +10,27 @@ import os
 import json
 import html
 
-# Add Strategy-Agent to path
-sys.path.append(os.path.join(os.path.dirname(__file__), 'Strategy-Agent'))
+# --------------------------------------------------------------------
+# Path setup for imports
+# --------------------------------------------------------------------
+BASE_DIR = os.path.dirname(os.path.dirname(__file__))  # project root (Streamlit-UI)
+if BASE_DIR not in sys.path:
+    sys.path.append(BASE_DIR)
 
-# Import utilities (will be created in subsequent tasks)
+# --------------------------------------------------------------------
+# Imports
+# --------------------------------------------------------------------
 from utils.storage_manager import ChatStorageManager
-from utils.agent_integration import call_strategy_agent, AGENT_AVAILABLE, USING_MOCK
+from utils.agent_integration import (
+    call_strategy_agent,
+    call_postcall_agent,
+    AGENT_AVAILABLE,
+    USING_MOCK,
+)
 from utils.response_formatter import format_agent_response
 from utils.styles import get_custom_css, AWS_COLORS
 from utils.error_handler import handle_error
+
 
 def main():
     """Main application entry point"""
@@ -40,7 +52,7 @@ def main():
     if USING_MOCK:
         st.warning(
             "⚠️ **Using Mock Agent** - You're seeing sample data. "
-            "To use the real Strategy Agent, please resolve the dependency issue. "
+            "To use the real Strategy/Post-Call Agents, please resolve the dependency issue. "
             "See TROUBLESHOOTING.md for solutions.",
             icon="⚠️"
         )
@@ -93,6 +105,7 @@ def _json_to_html(value, level: int = 0) -> str:
         else:  # int, float, etc.
             return f"<span class='json-number'>{value}</span>"
 
+
 def initialize_session_state():
     """Initialize Streamlit session state variables"""
     # Initialize storage manager
@@ -101,7 +114,9 @@ def initialize_session_state():
     
     # Initialize current session ID
     if 'current_session_id' not in st.session_state:
-        st.session_state.current_session_id = st.session_state.storage_manager.create_session()
+        st.session_state.current_session_id = (
+            st.session_state.storage_manager.create_session()
+        )
     
     # Load messages for current session
     if 'messages' not in st.session_state:
@@ -111,19 +126,29 @@ def initialize_session_state():
     
     # Load all chat sessions
     if 'chat_sessions' not in st.session_state:
-        st.session_state.chat_sessions = st.session_state.storage_manager.get_all_sessions()
+        st.session_state.chat_sessions = (
+            st.session_state.storage_manager.get_all_sessions()
+        )
     
     # Processing flag
     if 'is_processing' not in st.session_state:
         st.session_state.is_processing = False
 
+    # Copilot mode: "pre-call" or "post-call"
+    if 'copilot_mode' not in st.session_state:
+        st.session_state.copilot_mode = "pre-call"  # default
+
 
 def render_header():
-    """Render AWS-themed header with SALES-COPILOT branding"""
+    """Render AWS-themed header with SALES-COPILOT branding + mode badge"""
+    mode = st.session_state.get("copilot_mode", "pre-call")
+    mode_label = "Pre-Call Mode" if mode == "pre-call" else "Post-Call Mode"
+
     st.markdown(
         f"""
         <div class="sales-copilot-header">
             <span style="color: {AWS_COLORS['primary_orange']}">SALES</span>-COPILOT
+            <span class="mode-pill">{mode_label}</span>
         </div>
         """,
         unsafe_allow_html=True
@@ -131,9 +156,25 @@ def render_header():
 
 
 def render_sidebar():
-    """Render sidebar with chat history"""
+    """Render sidebar with chat history and mode selection"""
     with st.sidebar:
         st.title("💬 Chat History")
+
+        # Mode selection
+        st.subheader("Mode Selection")
+
+        selected_mode = st.radio(
+            "Conversation Mode",
+            ["Pre-Call Copilot", "Post-Call Copilot"],
+            index=0 if st.session_state.copilot_mode == "pre-call" else 1,
+            label_visibility="collapsed",
+        )
+
+        st.session_state.copilot_mode = (
+            "pre-call" if selected_mode == "Pre-Call Copilot" else "post-call"
+        )
+
+        st.divider()
         
         # New Chat button
         if st.button("➕ New Chat", use_container_width=True, type="primary"):
@@ -142,7 +183,9 @@ def render_sidebar():
         st.divider()
         
         # Refresh sessions list
-        st.session_state.chat_sessions = st.session_state.storage_manager.get_all_sessions()
+        st.session_state.chat_sessions = (
+            st.session_state.storage_manager.get_all_sessions()
+        )
         
         # Display chat sessions
         if not st.session_state.chat_sessions:
@@ -160,8 +203,6 @@ def render_sidebar():
 
 def render_conversation():
     """Render all messages in current conversation"""
-    from datetime import datetime
-    
     # Container for messages
     st.markdown('<div class="conversation-container">', unsafe_allow_html=True)
     
@@ -173,7 +214,7 @@ def render_conversation():
                 <div class="empty-state-icon">🤖</div>
                 <h3>Welcome to SALES-COPILOT</h3>
                 <p>Ask me about HCP profiles, prescribing trends, access intelligence,<br>
-                competitive insights, or get a complete pre-call brief!</p>
+                competitive insights, or get a complete pre-call or post-call brief!</p>
             </div>
             """,
             unsafe_allow_html=True
@@ -191,15 +232,13 @@ def render_conversation():
 
 def render_user_message(content: str, timestamp: str):
     """Render a user message"""
-    from datetime import datetime
-    
     # Format timestamp
     time_str = ""
     if timestamp:
         try:
             dt = datetime.fromisoformat(timestamp)
             time_str = dt.strftime("%I:%M %p")
-        except:
+        except Exception:
             pass
     
     st.markdown(
@@ -213,36 +252,8 @@ def render_user_message(content: str, timestamp: str):
     )
 
 
-# def render_agent_message(content: dict, timestamp: str):
-#     """Render an agent response"""
-#     from datetime import datetime
-    
-#     # Format timestamp
-#     time_str = ""
-#     if timestamp:
-#         try:
-#             dt = datetime.fromisoformat(timestamp)
-#             time_str = dt.strftime("%I:%M %p")
-#         except:
-#             pass
-    
-#     # Format the content
-#     formatted_content = format_agent_response(content)
-    
-#     st.markdown(
-#         f"""
-#         <div class="agent-message">
-#             {formatted_content}
-#             {f'<div class="message-timestamp">{time_str}</div>' if time_str else ''}
-#         </div>
-#         """,
-#         unsafe_allow_html=True
-#     )
-
 def render_agent_message(content: dict, timestamp: str):
     """Render an agent response (supports nested JSON from backend)"""
-    from datetime import datetime
- 
     # Try to parse JSON if backend returned a string
     content_obj = content
     if isinstance(content, str):
@@ -263,7 +274,7 @@ def render_agent_message(content: dict, timestamp: str):
  
     # Decide how to render
     if isinstance(content_obj, dict) and content_obj.get("type") == "error":
-        # Keep your existing error formatting logic
+        # Error formatting logic
         formatted_content = format_agent_response(content_obj)
     elif isinstance(content_obj, (dict, list)):
         # Generic nested JSON → HTML tree
@@ -274,10 +285,10 @@ def render_agent_message(content: dict, timestamp: str):
  
     st.markdown(
         f"""
-<div class="agent-message">
+        <div class="agent-message">
             {formatted_content}
             {f'<div class="message-timestamp">{time_str}</div>' if time_str else ''}
-</div>
+        </div>
         """,
         unsafe_allow_html=True
     )
@@ -285,8 +296,15 @@ def render_agent_message(content: dict, timestamp: str):
 
 def render_input_box():
     """Render fixed input box at bottom"""
+    mode = st.session_state.get("copilot_mode", "pre-call")
+
+    if mode == "pre-call":
+        placeholder = "Ask about HCP profiles, prescribing trends, or get pre-call briefs..."
+    else:
+        placeholder = "Ask to summarize calls, extract actions, sentiment, or post-call insights..."
+
     user_input = st.chat_input(
-        "Ask about HCP profiles, prescribing trends, or get pre-call briefs...",
+        placeholder,
         disabled=st.session_state.is_processing
     )
     
@@ -296,7 +314,6 @@ def render_input_box():
 
 def handle_message_submission(user_input: str):
     """Process user message and get agent response"""
-    from datetime import datetime
     from utils.error_handler import handle_error, display_error
     
     # Set processing flag
@@ -318,10 +335,15 @@ def handle_message_submission(user_input: str):
             user_message
         )
         
+        # Decide which agent to call based on mode
+        mode = st.session_state.get("copilot_mode", "pre-call")
+        
         # Show loading indicator
         with st.spinner("🤖 Agent is thinking..."):
-            # Call strategy agent
-            response = call_strategy_agent(user_input, st.session_state.messages)
+            if mode == "pre-call":
+                response = call_strategy_agent(user_input, st.session_state.messages)
+            else:
+                response = call_postcall_agent(user_input, st.session_state.messages)
         
         # Check if response was successful
         if response.get('success', False):
@@ -377,8 +399,6 @@ def handle_message_submission(user_input: str):
 
 def render_session_item(session: dict):
     """Render a single session item in sidebar"""
-    from datetime import datetime
-    
     session_id = session['session_id']
     preview = session.get('preview', 'New conversation')
     last_updated = session.get('last_updated', '')
@@ -388,7 +408,7 @@ def render_session_item(session: dict):
     try:
         dt = datetime.fromisoformat(last_updated)
         time_str = dt.strftime("%b %d, %I:%M %p")
-    except:
+    except Exception:
         time_str = ""
     
     # Check if this is the active session
@@ -421,7 +441,9 @@ def render_session_item(session: dict):
 
 def create_new_chat():
     """Create a new chat session"""
-    st.session_state.current_session_id = st.session_state.storage_manager.create_session()
+    st.session_state.current_session_id = (
+        st.session_state.storage_manager.create_session()
+    )
     st.session_state.messages = []
     st.rerun()
 
@@ -429,7 +451,9 @@ def create_new_chat():
 def load_chat_session(session_id: str):
     """Load a specific chat session"""
     st.session_state.current_session_id = session_id
-    st.session_state.messages = st.session_state.storage_manager.load_session(session_id)
+    st.session_state.messages = (
+        st.session_state.storage_manager.load_session(session_id)
+    )
     st.rerun()
 
 

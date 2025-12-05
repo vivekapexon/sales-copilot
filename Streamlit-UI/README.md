@@ -1,34 +1,57 @@
 # SALES-COPILOT
 
-An AWS-themed Streamlit web interface for the Strategy Agent system that orchestrates 6 specialized agents to provide comprehensive sales intelligence.
+An AWS-themed Streamlit web interface for the **Sales Strategy & Post-Call Intelligence** system that orchestrates agents to provide comprehensive sales intelligence.
+
+---
 
 ## Features
 
-- 🎨 **AWS-Themed Interface** - Professional orange and dark gray color scheme
-- 💬 **ChatGPT-Style Conversation** - Familiar chat interface with message history
-- 📝 **Persistent Chat History** - All conversations are saved and can be revisited
-- 🤖 **Multi-Agent Intelligence** - Integrates Profile, History, Prescribing, Access, Competitive, and Content agents
-- 🔄 **Follow-Up Questions** - Maintains conversation context for natural interactions
-- 📊 **Formatted Responses** - Clean display of JSON data with expandable sections
+- 🎨 **AWS-Themed Interface** – Professional orange and dark gray color scheme  
+- 💬 **ChatGPT-Style Conversation** – Familiar chat interface with message history  
+- 📝 **Persistent Chat History** – All conversations are saved and can be revisited  
+- 🤖 **Pre-Call Multi-Agent Intelligence** – Integrates Profile, History, Prescribing, Access, Competitive, and Content agents  
+- 🧠 **Post-Call Multi-Agent Intelligence (NEW)** – Integrates Transcription, Structure, Compliance, Sentiment, and Action agents  
+- 🔄 **Follow-Up Questions** – Maintains conversation context for natural interactions  
+- 📊 **Formatted Responses** – Clean display of JSON data with expandable sections  
+- 🔀 **Mode Switching** – Sidebar toggle between **Pre-Call Copilot** and **Post-Call Copilot**  
+
+---
 
 ## Architecture
 
-The application consists of:
+The application consists of two main orchestrators:
 
-- **Strategy Agent** - Orchestrates 6 specialized agents based on user intent
-- **Profile Agent** - HCP demographics and practice details
-- **History Agent** - Past interactions and call notes
-- **Prescribing Agent** - TRx/NRx trends and adoption metrics
-- **Access Agent** - Formulary status and coverage information
-- **Competitive Agent** - Competitor activity and threats
-- **Content Agent** - Approved materials and messaging
+### 1. Pre-Call Strategy Layer
+
+- **Strategy Agent** – Orchestrates 6 specialized agents based on user intent:
+  - **Profile Agent** – HCP demographics and practice details  
+  - **History Agent** – Past interactions and call notes  
+  - **Prescribing Agent** – TRx/NRx trends and adoption metrics  
+  - **Access Agent** – Formulary status and coverage information  
+  - **Competitive Agent** – Competitor activity and threats  
+  - **Content Agent** – Approved materials and messaging  
+
+### 2. Post-Call Supervisor Layer (NEW)
+
+- **Supervisor Agent** – Orchestrates 5 specialized post-call agents:
+  - **Transcription Agent** – Converts call audio to text  
+  - **Structure Agent** – Structures notes, key topics, objections, commitments  
+  - **Compliance Agent** – Drafts compliant follow-up emails  
+  - **Action Agent** – Extracts action items and next steps  
+  - **Sentiment Agent** – Quantifies tone, receptivity, and risk signals  
+
+The Streamlit UI routes each user message to the correct orchestrator based on the **selected mode** in the sidebar:
+- **Pre-Call Copilot** → Strategy Agent  
+- **Post-Call Copilot** → Supervisor Agent  
+
+---
 
 ## Installation
 
 ### Prerequisites
 
-- Python 3.8 or higher
-- pip package manager
+- Python 3.8 or higher  
+- pip package manager  
 
 ### Setup Steps
 
@@ -36,7 +59,6 @@ The application consists of:
 
 ```bash
 cd /path/to/project
-```
 
 2. **Install dependencies**
 
@@ -61,16 +83,29 @@ pip install -r requirements.txt
 
 3. **Verify Strategy Agent is available**
 
-Make sure the `Strategy-Agent` directory exists with all required agent modules:
-- `strategy_agent.py`
-- `Agents/profile_agent.py`
-- `Agents/history_agent.py`
-- `Agents/prescribe_agent.py`
-- `Agents/access_agent.py`
-- `Agents/competitive_agent.py`
-- `Agents/content_agent.py`
+Make sure the following directories and files exist in the project root::
+Pre-Call (Strategy_Agent)
 
-**Note:** If the real agent can't load, a mock agent will be used automatically for UI testing.
+- `Strategy_Agent/strategy_agent.py`
+- `Strategy_Agent/Agents/profile_agent.py`
+- `Strategy_Agent/Agents/history_agent.py`
+- `Strategy_Agent/Agents/prescribe_agent.py`
+- `Strategy_Agent/Agents/access_agent.py`
+- `Strategy_Agent/Agents/competitive_agent.py`
+- `Strategy_Agent/Agents/content_agent.py`
+
+Post-Call (Supervisor_Agent)
+
+- `post_call/supervisor_agent.py`
+- `post_call/Agents/transcription_agent.py`
+- `post_call/Agents/structure_agent.py`
+- `post_call/Agents/action_agent.py`
+- `post_call/Agents/compilance_agent.py`
+- `post_call/Agents/sentiment_agent.py`
+
+
+
+**Note:** If the real agent can't load, a mock agent will be used automatically for UI testing(Pre-Call).
 
 ## Running the Application
 
@@ -91,6 +126,21 @@ streamlit run streamlit_app.py --server.port 8502
 ```
 
 ## Usage
+### Selecting Mode (Pre-Call vs Post-Call)
+
+In the sidebar, you’ll see a Mode Selection radio:
+
+1. Pre-Call Copilot
+
+2. Post-Call Copilot
+
+The selected mode controls which backend agent is used:
+
+Pre-Call Copilot → call_strategy_agent(...)
+
+Post-Call Copilot → call_supervisor_agent(...)
+
+You can switch modes at any time.
 
 ### Starting a New Chat
 
@@ -135,6 +185,17 @@ Which approved materials should I show Dr. Verma?
 When did I last meet Dr. X?
 ```
 
+**Post-Call Summary & Structure**
+```
+Summarize my last call with Dr. Johnson and list key objections and topics.
+
+```
+
+**Action Items / Next Steps**
+```
+What action items and commitments came out of my last meeting with HCP1001?
+```
+
 ### Follow-Up Questions
 
 After receiving a response, you can ask follow-up questions in the same conversation:
@@ -156,26 +217,42 @@ Agent: [Prescribing information with context]
 
 ```
 .
-├── streamlit_app.py          # Main application entry point
+.
+├── streamlit_app.py           # Main application entry point
 ├── requirements.txt           # Python dependencies
 ├── README.md                  # This file
 ├── chat_history/              # Stored chat sessions (JSON files)
+│   ├── sessions.json
+│   └── session_<uuid>.json
 ├── utils/                     # Utility modules
 │   ├── __init__.py
-│   ├── storage_manager.py    # Chat persistence
-│   ├── agent_integration.py  # Strategy agent interface
-│   ├── response_formatter.py # Response formatting
-│   ├── styles.py             # AWS theme CSS
-│   └── error_handler.py      # Error handling
-└── Strategy-Agent/            # Strategy agent and sub-agents
-    ├── strategy_agent.py
+│   ├── storage_manager.py     # Chat persistence
+│   ├── agent_integration.py   # Strategy & Supervisor agent interface
+│   ├── response_formatter.py  # Response formatting
+│   ├── styles.py              # AWS theme CSS
+│   └── error_handler.py       # Error handling
+├── Strategy_Agent/            # Pre-call Strategy Agent and sub-agents
+│   ├── __init__.py
+│   ├── strategy_agent.py
+│   └── Agents/
+│       ├── __init__.py
+│       ├── profile_agent.py
+│       ├── history_agent.py
+│       ├── prescribe_agent.py
+│       ├── access_agent.py
+│       ├── competitive_agent.py
+│       └── content_agent.py
+└── post_call/                 # Post-call Supervisor Agent and sub-agents
+    ├── __init__.py
+    ├── supervisor_agent.py
     └── Agents/
-        ├── profile_agent.py
-        ├── history_agent.py
-        ├── prescribe_agent.py
-        ├── access_agent.py
-        ├── competitive_agent.py
-        └── content_agent.py
+        ├── __init__.py
+        ├── transcription_agent.py       
+        ├── structure_agent.py / tools    structure_agent_tools.py, etc.
+        ├── compilance_agent.py          
+        ├── action_agent.py
+        └── sentiment_agent.py
+
 ```
 
 ## Configuration
@@ -217,13 +294,9 @@ AWS_COLORS = {
 
 **Alternative:** The app will automatically use a mock agent for testing the UI. See `TROUBLESHOOTING.md` for detailed solutions.
 
-### Strategy Agent Not Found
+### Strategy / Supervisor Agent Not Found
 
-**Error:** `Strategy agent not available. Please check installation.`
-
-**Solution:** Ensure the `Strategy-Agent` directory is in the project root and contains all required files.
-
-### Import Errors
+**Error:** `Strategy agent not available. Please check installation. or Post-call supervisor agent not available. Please check installation`.
 
 **Error:** `ModuleNotFoundError: No module named 'strands'`
 

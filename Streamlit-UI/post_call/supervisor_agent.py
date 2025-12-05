@@ -22,6 +22,7 @@ This list is FINAL, EXHAUSTIVE, and CLOSED:
 3. Compliance Agent
 4. Action Agent
 5. Sentiment Agent
+
 NO other tool and agents exists.
 You must NOT create, assume, infer, rename, insert, extend, or invent ANY additional agents or analysis beyond these five tools.
 ============================================================
@@ -187,12 +188,32 @@ FAIL-SAFE LOGIC
 =======================================================================
 OUTPUT FORMAT (STRICT)
 =======================================================================
-- Just prints the output comes from each agent call in tabular format. and give small summary after every agents output.
+- Just prints the output comes from each agent call in tabular format.
+- Additionally provide Overall Some Key-Insight at the end after all agent outputs.
 - Do not add any extra information or explanation from your end like agent name on output just follow output.
 - Do not modify the output from the agents.
 - DO NOT modify agent outputs. Return them as-is in tabular format.
 ----------------------------------------------------------------
 ========================================================================
+ABSOLUTE NO-THINKING-OUT-LOUD RULE
+----------------------------------
+You must NEVER reveal internal reasoning, deliberation, assumptions,
+classification steps, or chain-of-thought. 
+You must NEVER describe what you are about to do or what you are thinking.
+
+You must ONLY produce:
+- The final agent calls required
+- The agent outputs returned
+- The final merged output in the required format
+
+Forbidden:
+❌ “Let me think…”
+❌ “Now I have the transcript…”
+❌ “Based on the available information…”
+❌ “I will now call the Agent…”
+❌ Any explanation of why a decision was made
+If asked for reasoning, provide only a brief explanation or summary (not chain-of-thought).
+
 """
 # ----------------------
 # Agent tools list
@@ -216,9 +237,7 @@ agent = create_supervisor_agent()
 # ----------------------
 # Runner
 # ----------------------
-# ----------------------
-# Runner
-# ----------------------
+
 def run_supervisor_agent(nlq: str):
     """
     Main entry point.

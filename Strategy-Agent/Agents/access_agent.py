@@ -38,13 +38,17 @@ def get_schema_with_samples(table_name: str = "formulary_mart") -> str:
     
     return "\n".join(output)
 
-def create_access_agent():
+def create_access_agent(schema_with_samples: str = None):
     """
     Access Agent for formulary/access intelligence.
     Role: Provide coverage status updates and actionable opportunities.
+
+    Args:
+        schema_with_samples: Pre-fetched schema string. If None, will be fetched lazily.
     """
-    schema_with_samples = get_schema_with_samples("formulary_mart")
-    
+    if schema_with_samples is None:
+        schema_with_samples = get_schema_with_samples("formulary_mart")
+
     return Agent(
         system_prompt=f"""
 You are the ACCESS INTELLIGENCE AGENT for pharmaceutical sales.
@@ -106,12 +110,21 @@ If no matching data: {{"status": "error", "message": "No matching data found."}}
         tools=[execute_redshift_sql]
     )
 
-access_agent = create_access_agent()
+# Lazy initialization - agent is created on first use, not at import time
+_access_agent = None
+
+def get_access_agent():
+    """Get or create the access agent (lazy initialization)."""
+    global _access_agent
+    if _access_agent is None:
+        _access_agent = create_access_agent()
+    return _access_agent
 
 def ask_access_agent(query: str) -> str:
     """Query the access agent"""
     print(f"Access Query: {query}")
-    result = access_agent(query)
+    agent = get_access_agent()
+    result = agent(query)
     return result.text if hasattr(result, "text") else str(result)
 
 if __name__ == "__main__":

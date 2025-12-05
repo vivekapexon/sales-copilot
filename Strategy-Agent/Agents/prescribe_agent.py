@@ -115,7 +115,17 @@ def create_prescribing_agent():
         tools=_tools_list(),
     )
 
-agent = create_prescribing_agent()
+# Lazy initialization - agent is created on first use, not at import time
+_prescribing_agent = None
+
+
+def get_prescribing_agent():
+    """Get or create the prescribing agent (lazy initialization)."""
+    global _prescribing_agent
+    if _prescribing_agent is None:
+        _prescribing_agent = create_prescribing_agent()
+    return _prescribing_agent
+
 
 # ----------------------
 # Runner
@@ -126,6 +136,7 @@ def run_prescribing_agent(nlq: str):
     The agent will construct SQL, call execute_redshift_sql, and return the prescribing JSON.
     """
     instruction = nlq
+    agent = get_prescribing_agent()
     result = agent(instruction)
     # agent returns structured data from the LLM -> but per our system prompt the agent must return only the JSON object
     # Depending on Strands Agent implementation, result might be a string - ensure we parse/normalize:

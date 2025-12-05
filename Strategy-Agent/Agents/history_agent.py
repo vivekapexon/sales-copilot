@@ -112,20 +112,30 @@ def create_history_agent() -> Agent:
     )
  
  
-history_agent = create_history_agent()
- 
- 
+# Lazy initialization - agent is created on first use, not at import time
+_history_agent = None
+
+
+def get_history_agent():
+    """Get or create the history agent (lazy initialization)."""
+    global _history_agent
+    if _history_agent is None:
+        _history_agent = create_history_agent()
+    return _history_agent
+
+
 # ======================================================
 # 3) Helper for manual testing
 # ======================================================
- 
+
 def ask_history_agent(query: str) -> str:
     """
     Simple helper function to invoke the History Agent in natural language.
     It returns the agent's text output (which should be JSON from the tool).
     """
     print("NLQ = ", query)
-    result = history_agent(query)
+    agent = get_history_agent()
+    result = agent(query)
     return result.text if hasattr(result, "text") else str(result)
  
  

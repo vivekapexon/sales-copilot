@@ -21,5 +21,3 @@ GATEWAY_MAX_RETRIES = 5  # For Gateway calls (more retries for long-running work
 HTTP_UNAUTHORIZED = 401
 HTTP_FORBIDDEN = 403
 HTTP_TOO_MANY_REQUESTS = 429
-
-DOCKER_CONTAINER = "1"

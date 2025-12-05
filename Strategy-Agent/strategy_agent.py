@@ -8,7 +8,7 @@ from Agents import history_agent
 from Agents import access_agent 
 from Agents import competitive_agent
 from Agents import content_agent
-from configs import AWS_REGION, WORKLOAD_NAME, DOCKER_CONTAINER
+from configs import AWS_REGION, WORKLOAD_NAME
 logger = logging.getLogger(__name__)
 
 
@@ -97,14 +97,6 @@ except Exception as e:
     )
     sys.stdout.flush()
     sys.stderr.flush()
-
-    if DOCKER_CONTAINER == "1":
-        raise RuntimeError(
-            "Token management initialization failed. Ensure AWS credentials and "
-            "environment variables are properly configured."
-        ) from e
-    else:
-        raise RuntimeError(f"Token management initialization failed: {str(e)}") from e
 
 
 # ----------------------

@@ -302,6 +302,7 @@ Always follow this exact strict output format:
    - Do not invent or add anything beyond the table content.
 
 Hard Rules:  
+- If user does not ask for table explicitely, please does not give provide output in tabular format unitl and unless it is required.
 - Do not print any symbols and signs.
 - Do not change or reinterpret tool outputs.  
 - Do not print anything except the required table → summary → insights.  

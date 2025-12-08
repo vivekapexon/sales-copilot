@@ -5,9 +5,7 @@ import asyncio
 import boto3
 
 from strands import Agent
-from bedrock_agentcore.runtime import (
-    BedrockAgentCoreApp, BedrockAgentCoreContext
-    )
+from bedrock_agentcore.runtime import BedrockAgentCoreApp, BedrockAgentCoreContext
 from bedrock_agentcore.services.identity import IdentityClient
 from bedrock_agentcore.identity.auth import requires_access_token
 from strands.tools.mcp.mcp_client import MCPClient
@@ -217,7 +215,11 @@ def run_prescribing_agent(payload: dict = {}):
         return parsed
     except Exception:
         # fallback: return raw agent result
-        return {"status": "error", "message": "Agent did not return valid JSON", "raw": str(result)}
+        return {
+            "status": "error",
+            "message": "Agent did not return valid JSON",
+            "raw": str(result),
+        }
 
 
 # ----------------------

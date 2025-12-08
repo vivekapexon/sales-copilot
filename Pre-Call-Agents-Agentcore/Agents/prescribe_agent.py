@@ -207,18 +207,27 @@ def run_prescribing_agent(payload: dict = {}):
     result = agent(instruction)
     # agent returns structured data from the LLM -> but per our system prompt the agent must return only the JSON object
     # Depending on Strands Agent implementation, result might be a string - ensure we parse/normalize:
-    if isinstance(result, dict):
-        return result
     try:
-        # strip surrounding stuff and parse JSON
-        parsed = json.loads(result.message["content"][0]["text"])
-        return parsed
-    except Exception:
-        # fallback: return raw agent result
+        text = result.message["content"][0]["text"]
+    except (AttributeError, KeyError, IndexError) as e:
+        # structure missing or malformed
         return {
             "status": "error",
-            "message": "Agent did not return valid JSON",
+            "message": "AgentResult structure is missing expected fields",
+            "error": str(e),
             "raw": str(result),
+        }
+
+    try:
+        parsed = json.loads(text)
+        return parsed
+    except json.JSONDecodeError as e:
+        # JSON exists but is invalid
+        return {
+            "status": "error",
+            "message": "Agent returned invalid JSON",
+            "error": str(e),
+            "raw_json_text": text,
         }
 
 

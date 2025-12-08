@@ -203,7 +203,7 @@ def run_prescribing_agent(payload: dict = {}):
     Entrypoint: Pass an NLQ string describing the desired prescribing information.
     The agent will construct SQL, call execute_redshift_sql, and return the prescribing JSON.
     """
-    instruction = payload.get("prompt", "Give me the details of HCP1001")
+    instruction = payload.get("prompt", "Show be the priscribing behaviour of HCP1001")
     result = agent(instruction)
     # agent returns structured data from the LLM -> but per our system prompt the agent must return only the JSON object
     # Depending on Strands Agent implementation, result might be a string - ensure we parse/normalize:
@@ -211,7 +211,7 @@ def run_prescribing_agent(payload: dict = {}):
         return result
     try:
         # strip surrounding stuff and parse JSON
-        parsed = json.loads(result)
+        parsed = json.loads(result.message["content"][0]["text"])
         return parsed
     except Exception:
         # fallback: return raw agent result

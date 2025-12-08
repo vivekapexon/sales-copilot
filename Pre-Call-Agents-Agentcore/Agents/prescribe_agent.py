@@ -1,17 +1,30 @@
+import os
 import json
-from strands import Agent
-from .Tools.execute_redshift_sql import execute_redshift_sql
+import re
+import asyncio
 import boto3
+
+from strands import Agent
+from bedrock_agentcore.runtime import (
+    BedrockAgentCoreApp, BedrockAgentCoreContext
+    )
+from bedrock_agentcore.services.identity import IdentityClient
+from bedrock_agentcore.identity.auth import requires_access_token
+from strands.tools.mcp.mcp_client import MCPClient
+from mcp.client.streamable_http import streamablehttp_client
+
 # ----------------------
-# Configuration 
+# Configuration
 # ----------------------
 DATABASE = "sales_copilot_db"
 DEFAULT_SQL_LIMIT = 1000
 
-
+app = BedrockAgentCoreApp()
 # ----------------------
 # Allowed columns list (exact names from your table)
 # ----------------------
+
+
 def get_parameter_value(parameter_name):
     """Fetch an individual parameter by name from AWS Systems Manager Parameter Store.
 
@@ -29,7 +42,68 @@ def get_parameter_value(parameter_name):
     except Exception as e:
         print(f"Error fetching parameter {parameter_name}: {str(e)}")
         return None
+
+
+def _parse_scopes(s: str) -> list[str]:
+    if not s:
+        return []
+    parts = re.split(r"[,\s]+", s.strip())
+    return [p for p in parts if p]
+
+
+HCP_SCHEMA_COLUMNS = get_parameter_value("SC_HCP_SCHEMA_COLUMNS")
+MCP_GATEWAY_URL = get_parameter_value("MCP_GATEWAY_URL")
+OAUTH_PROVIDER_NAME = get_parameter_value("PROVIDER_NAME")
+OAUTH_SCOPE = _parse_scopes(get_parameter_value("SCOPE"))
 ALLOWED_COLUMNS = get_parameter_value("SC_HCP_SCHEMA_COLUMNS")
+
+
+# ---------------------------------------------------
+# 1) Identity & Access Bootstrap
+# ---------------------------------------------------
+identity_client = IdentityClient("us-east-1")
+workload_access_token = identity_client.get_workload_access_token(
+    workload_name="Sales-Copilet-Agents",
+)["workloadAccessToken"]
+
+if workload_access_token:
+    BedrockAgentCoreContext.set_workload_access_token(workload_access_token)
+else:
+    if os.getenv("DOCKER_CONTAINER") == "1":
+        raise RuntimeError(
+            "WORKLOAD_ACCESS_TOKEN not set. Supply it via: "
+            "docker run -e WORKLOAD_ACCESS_TOKEN=<token> ... or inject via secret manager."
+        )
+
+
+@requires_access_token(
+    provider_name=OAUTH_PROVIDER_NAME,
+    scopes=OAUTH_SCOPE,
+    auth_flow="M2M",
+)
+async def fetch_m2m_token(*, access_token: str):
+    return access_token
+
+
+def create_streamable_http_transport(mcp_url: str, access_token: str):
+    """Helper to create MCP transport with Auth header."""
+    return streamablehttp_client(
+        mcp_url, headers={"Authorization": f"Bearer {access_token}"}
+    )
+
+
+def get_full_tools_list(client):
+    """List all tools from MCP Gateway (supports pagination)."""
+    tools = []
+    pagination_token = None
+    while True:
+        result = client.list_tools_sync(pagination_token=pagination_token)
+        tools.extend(result)
+        if not result.pagination_token:
+            break
+        pagination_token = result.pagination_token
+    return tools
+
 
 # ----------------------
 # Agent prompt: instructs how to build SQL from NLQ and what final JSON to produce
@@ -88,7 +162,7 @@ STEP C: Output ONLY the final JSON object with top-level keys:
       Growth Potential (opportunity): {{ Gap to Monthly Prescription Goal (gap_to_goal_28d), Potential Uplift Score (potential_uplift_index) }},
       Risk: {{ Probability the HCP will reduce or stop prescribing your brand in the next period (churn_risk_score), How open the HCP is expected to be to your next interaction (receptivity_score) }},
       Brand adoption journey: "<adoption_stage_ordinal> (0: "Aware / Non-user", 1: "Considering", 2: "Trialing", 3: "Adopting", 4: "Champion", 5: "Regular User") Just print labels"
-    }} 
+    }}
   }}
 
 --- Query Patterns ---
@@ -106,29 +180,32 @@ STEP C: Output ONLY the final JSON object with top-level keys:
 
 """
 
-# ----------------------
-# Agent tools list and creation
-# ----------------------
-def _tools_list():
-    return [execute_redshift_sql]
 
 def create_prescribing_agent():
+    access_token = asyncio.run(fetch_m2m_token(access_token=""))
+    mcp_client = MCPClient(
+        lambda: create_streamable_http_transport(MCP_GATEWAY_URL, access_token)
+    )
+    mcp_client.__enter__()
     return Agent(
         system_prompt=PRESCRIBING_AGENT_PROMPT,
-        tools=_tools_list(),
+        tools=get_full_tools_list(mcp_client),
     )
 
+
 agent = create_prescribing_agent()
+
 
 # ----------------------
 # Runner
 # ----------------------
-def run_prescribing_agent(nlq: str):
+@app.entrypoint
+def run_prescribing_agent(payload: dict = {}):
     """
     Entrypoint: Pass an NLQ string describing the desired prescribing information.
     The agent will construct SQL, call execute_redshift_sql, and return the prescribing JSON.
     """
-    instruction = nlq
+    instruction = payload.get("prompt", "Give me the details of HCP1001")
     result = agent(instruction)
     # agent returns structured data from the LLM -> but per our system prompt the agent must return only the JSON object
     # Depending on Strands Agent implementation, result might be a string - ensure we parse/normalize:
@@ -142,15 +219,9 @@ def run_prescribing_agent(nlq: str):
         # fallback: return raw agent result
         return {"status": "error", "message": "Agent did not return valid JSON", "raw": str(result)}
 
+
 # ----------------------
 # Example usage (local)
 # ----------------------
 if __name__ == "__main__":
-    # quick manual test: replace with the NLQ you want
-    nlq_example = input("Enter your prompt: ")
-    out = run_prescribing_agent(nlq_example)
-    # print(json.dumps(out, indent=2))
-    # sql_query = "SELECT * FROM healthcare_data WHERE doctor_first_name = 'Ashley'"
-    # print(sql_query)
-    # out = execute_redshift_sql(sql_query)
-    # print(out)
+    app.run()

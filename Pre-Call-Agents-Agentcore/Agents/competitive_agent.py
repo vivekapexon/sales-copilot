@@ -26,6 +26,29 @@ GLOBAL_SIGNALS: List[Dict[str, Any]] = []
 # ============================================================
 # UTILITIES
 # ============================================================
+def get_parameter_value(parameter_name):
+    """Fetch an individual parameter by name from AWS Systems Manager Parameter Store.
+
+    Returns:
+        str or None: The parameter value (decrypted if needed) or None on error.
+
+    Notes:
+      - This helper reads configuration from SSM Parameter Store. Example usage in this module:
+          get_parameter_value("EDC_DATA_BUCKET") -> returns the S3 bucket name used for EDC files.
+    """
+    try:
+        ssm_client = boto3.client("ssm", region_name="us-east-1")
+        response = ssm_client.get_parameter(Name=parameter_name, WithDecryption=True)
+        return response["Parameter"]["Value"]
+    except Exception as e:
+        print(f"Error fetching parameter {parameter_name}: {str(e)}")
+        return None
+
+BUCKET_TO_READ_DATA = get_parameter_value("SC_CA_BUCKET")
+print(BUCKET_TO_READ_DATA)
+BUCKET_KEY = get_parameter_value("SC_CA_BUCKET_KEY")
+print(BUCKET_KEY)
+
 def prepare_numeric_matrix(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[str]]:
     """
     Auto-detect numeric columns, coerce to numeric, remove constant columns.
@@ -286,18 +309,19 @@ def create_competitive_agent() -> Agent:
         tools=[fetch_competitive_data_s3, compute_signals_generic, query_signals]
     )
 
-
 # ============================================================
 # SETUP — Load data from S3 once
 # ============================================================
-def run_competitive_setup_s3():
+def run_competitive_setup_s3() -> dict:
     global GLOBAL_SIGNALS
 
-    # <<< No environment usage, no arguments >>>
-    BUCKET = "competitive-data-bucket"
-    KEY = "data/competitive_agent_final_data_set.csv"
+    # Load bucket + key from AWS SSM Parameter Store
+    BUCKET = get_parameter_value("SC_CA_BUCKET")
+    KEY = get_parameter_value("SC_CA_BUCKET_KEY")
 
-    # Fetch from S3
+    if not BUCKET or not KEY:
+        return {"status": "error", "message": "Missing SSM parameters SC_CA_BUCKET or SC_CA_BUCKET_KEY"}
+
     fetch = fetch_competitive_data_s3(bucket=BUCKET, key=KEY)
 
     if fetch.get("status") != "ok":
@@ -316,6 +340,8 @@ def run_competitive_setup_s3():
         "source": ref,
     }
 
+ 
+
 
 
 # ============================================================
@@ -331,7 +357,7 @@ if __name__ == "__main__":
     agent = create_competitive_agent()
 
     # Strand will AUTO-PRINT the response. No print() needed.
-    agent("Show me the highest severity HCP signals.")
-    # agent("Explain the signal reasoning for row 10.")
-    # agent("List HCPs with medium severity signals.")
+    # agent("Show me the highest severity HCP signals.")
+    #agent("Explain the signal reasoning for row 10.")
+    agent("List HCPs with medium severity signals.")
    

@@ -8,12 +8,11 @@ import math
 import zipfile
 import logging
 from typing import Any, Dict, List, Tuple
-
 import boto3
 import pandas as pd
 import numpy as np
 from strands import Agent, tool
-
+from bedrock_agentcore.runtime import BedrockAgentCoreApp
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("competitive_agent")
 
@@ -21,7 +20,7 @@ logger = logging.getLogger("competitive_agent")
 # GLOBAL SIGNAL STORAGE
 # ============================================================
 GLOBAL_SIGNALS: List[Dict[str, Any]] = []
-
+app = BedrockAgentCoreApp()
 
 # ============================================================
 # UTILITIES
@@ -45,9 +44,7 @@ def get_parameter_value(parameter_name):
         return None
 
 BUCKET_TO_READ_DATA = get_parameter_value("SC_CA_BUCKET")
-print(BUCKET_TO_READ_DATA)
 BUCKET_KEY = get_parameter_value("SC_CA_BUCKET_KEY")
-print(BUCKET_KEY)
 
 def prepare_numeric_matrix(df: pd.DataFrame) -> Tuple[pd.DataFrame, List[str]]:
     """
@@ -340,24 +337,23 @@ def run_competitive_setup_s3() -> dict:
         "source": ref,
     }
 
- 
+setup_result = run_competitive_setup_s3()
 
+# If error, stop execution
+if setup_result.get("status") != "ok":
+    raise RuntimeError("Setup failed. Cannot start agent.")
 
+agent = create_competitive_agent()
 
-# ============================================================
-# MAIN — Strand auto prints, no print() needed
-# ============================================================
+@app.entrypoint
+def run_main_agent(payload: dict = {}):
+    payload = payload.get("prompt", "Show me the highest severity HCP signals.")
+    agent_result = agent(payload)
+    return agent_result
+
+# ---------------------------------------------------
+# 5) Run Locally
+# ---------------------------------------------------
 if __name__ == "__main__":
-    # BUCKET = os.environ.get("COMP_BUCKET", "competitive-data-bucket")
-    # KEY = os.environ.get("COMP_KEY", "data/competitive_dataset_clean.csv")    #old data
-    # KEY = os.environ.get("COMP_KEY", "data/competitive_agent_final_data_set.csv")      #new data
-    print("Loading from S3...")
-    
-    print(run_competitive_setup_s3())
-    agent = create_competitive_agent()
-
-    # Strand will AUTO-PRINT the response. No print() needed.
-    # agent("Show me the highest severity HCP signals.")
-    #agent("Explain the signal reasoning for row 10.")
-    agent("List HCPs with medium severity signals.")
-   
+    app.run()
+    #run_main_agent()

@@ -1,6 +1,7 @@
+# /post_call/Agents/sentiment_agent.py
 import json
-from strands import Agent,tool
-from Tools.validate_transcription_tools import validate_transcription_for_sentiment
+from strands import Agent
+from .Tools.validate_transcription_tools import validate_transcription_for_sentiment
 
 INSIGHT_EXTRACTION_AGENT_PROMPT = """
 You are the Sentiment and Insight Extraction Agent for HCP sales calls.

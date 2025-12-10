@@ -1,9 +1,10 @@
+# /post_call/Agents/action_agent.py
 import json
 import boto3
 import os
 from dotenv import load_dotenv
 from strands import Agent, tool
-from Tools.execute_redshift_sql import execute_redshift_sql
+from .Tools.execute_redshift_sql import execute_redshift_sql
 
 # ---------------------------------------------------
 # 0) JSON

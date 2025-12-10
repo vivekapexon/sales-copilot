@@ -1,5 +1,6 @@
+# /post_call/Agents/compilance_agent.py
 from strands import Agent, tool
-from Tools.execute_redshift_sql import execute_redshift_sql
+from .Tools.execute_redshift_sql import execute_redshift_sql
 
 # ---------------------------------------------------
 # Compliance table schema (informational)

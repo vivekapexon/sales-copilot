@@ -1,9 +1,9 @@
-#structure agent.py
+#/post_call/Agents/Tools/structure_agent_tools.py
 import json
 import boto3
 from typing import Dict, Any
 from strands import tool
-from Tools.execute_redshift_sql import execute_redshift_sql
+from .execute_redshift_sql import execute_redshift_sql
 import pandas as pd
 # AWS clients 
 s3 = boto3.client("s3")
@@ -36,9 +36,9 @@ def save_structured_note(key: str, note: Dict[str, Any]) -> str:
 
 
 @tool
-def load_hcp_data_from_redshift(hcp_id: str) -> str:
+def load_transcription_data_from_redshift(hcp_id: str) -> str:
     """
-    Load a transcript row from Redshift for the specified HCP ID and return it as a JSON string.
+    Load a transcript text row from Redshift for the specified HCP ID and return it as a JSON string.
 
     Behavior:
       - Queries Redshift using the execute_redshift_sql tool.

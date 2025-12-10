@@ -1,5 +1,5 @@
 import os
-from strands import Agent
+from strands import Agent, tool
 import boto3
 import asyncio
 import re
@@ -7,9 +7,12 @@ from bedrock_agentcore.runtime import BedrockAgentCoreApp, BedrockAgentCoreConte
 from bedrock_agentcore.services.identity import IdentityClient
 from bedrock_agentcore.identity.auth import requires_access_token
 from strands.tools.mcp.mcp_client import MCPClient  
-from mcp.client.streamable_http import streamablehttp_client  
+from mcp.client.streamable_http import streamablehttp_client 
+from opensearchpy import AWSV4SignerAuth 
+from opensearchpy import OpenSearch, RequestsHttpConnection
+import json
 
-app = BedrockAgentCoreApp()
+AWS_REGION = "us-east-1"
 
 def get_parameter_value(parameter_name):
     """Fetch an individual parameter by name from AWS Systems Manager Parameter Store.
@@ -28,6 +31,33 @@ def get_parameter_value(parameter_name):
     except Exception as e:
         print(f"Error fetching parameter {parameter_name}: {str(e)}")
         return None
+    
+BEDROCK_EMBED_MODEL = get_parameter_value("SALES_COPILOT_BEDROCK_EMBED_MODEL")
+
+bedrock_client = boto3.client(service_name="bedrock-runtime", region_name=AWS_REGION)
+
+app = BedrockAgentCoreApp()
+
+SC_AOSS_ENDPOINT = get_parameter_value("SALES_COPILOT_AOSS_ENDPOINT")
+SC_HCP_AOSS_INDEX = get_parameter_value("SC_HCP_AOSS_INDEX")
+
+def _aoss_client():
+    region = AWS_REGION
+    endpoint = SC_AOSS_ENDPOINT
+    if not endpoint:
+        return None
+    # strip scheme for OpenSearch(hosts=[{"host": ..., "port": 443}])
+    auth = AWSV4SignerAuth(boto3.Session().get_credentials(), region, service="aoss")
+    return OpenSearch(
+        hosts=[{"host": endpoint.replace("https://",""), "port": 443}],
+        http_auth=auth, use_ssl=True, verify_certs=True,
+        connection_class=RequestsHttpConnection
+    )
+
+opensearch_client = _aoss_client()
+INDEX_NAME = SC_HCP_AOSS_INDEX
+
+
 
 def _parse_scopes(s: str) -> list[str]:
     if not s:
@@ -83,6 +113,57 @@ def get_full_tools_list(client):
         pagination_token = result.pagination_token
     return tools
 
+
+@tool
+def retrieve_territory_context(query: str, top_k: int = 10, size: int = 100) -> dict:
+    """
+    Retrieve relevant curated schema context chunks from OpenSearch Serverless (AOSS)
+    using Bedrock embeddings.
+    """
+    if not opensearch_client:
+        return "OpenSearch Serverless endpoint not configured. Set NL_OPENSEARCH_SERVERLESS_ENDPOINT."
+
+    # Step 1: Embed the query using configured model
+    try:
+        response = bedrock_client.invoke_model(
+            modelId=BEDROCK_EMBED_MODEL,
+            body=json.dumps({"inputText": query}),
+        )
+        response_body = json.loads(response["body"].read())
+        query_vector = (
+            response_body.get("embedding")
+            or response_body.get("outputTextEmbedding", {}).get("embedding")
+        )
+        if not query_vector:
+            return "Failed to extract embedding vector from Bedrock embedding response."
+    except Exception as e:
+        return f"Bedrock embedding error: {e}"
+
+    # Step 2: k-NN vector search in AOSS
+    try:
+        search_body = {
+            "size": size,
+            "query": {
+                "knn": {
+                    "embedding": {
+                        "vector": query_vector,
+                        "k": top_k
+                    }
+                }
+            }
+        }
+        resp = opensearch_client.search(index=INDEX_NAME, body=search_body)
+    except Exception as e:
+        return f"AOSS search error: {e}"
+
+    # Step 3: Collect context chunks
+    hits = resp.get("hits", {}).get("hits", [])
+    if not hits:
+        return "No relevant context found."
+
+    chunks = [h["_source"]["text"] for h in hits if "_source" in h and "text" in h["_source"]]
+    return "\n---\n".join(chunks)
+
 # ---------------------------------------------------
 # 2) Agent Definition
 # ---------------------------------------------------
@@ -93,24 +174,34 @@ def create_agent():
     mcp_client.__enter__()
     return Agent(
         system_prompt=f"""
+
+            ##Role:
             You are the Territory Agent.
             Your job is to interpret the user’s natural language request about HCP targeting, territory focus, or competitor/access dynamics, then generate a highly precise SQL query to fetch data from Redshift using the registered execute_redshift_sql tool.
 
-            Your responsibilities:
+            ##Your responsibilities:
             1. Understand the user’s NLQ even if they don’t give territory, HCP IDs, product name, or disease explicitly.
-            2. Identify key intent dimensions:
-            - target territory (if missing, infer top territories from data)
-            - target behavior (e.g., rising competitor prescriptions, access opportunity)
-            - clinical domain (e.g., Diabetes) when provided
-            - ranking logic (“call first” → highest priority score)
-            3. Generate a SQL query over the healthcare_data table to fetch only the needed fields.
-            4. Always filter and sort based on the user's intent using dynamic conditions.
-            5. Never hardcode territory_id, product_id, or HCP IDs unless user explicitly mentions them.
-            6. Return SQL results ranked with a clear priority score and reason codes.
-            7. If the request is about “which territory to focus on”, compute territory-level aggregates.
+            2. Return SQL results ranked with a clear priority score and reason codes.
+            3. If the request is about “which territory to focus on”, compute territory-level aggregates.
 
-            Rules:
-            - Only use columns that exist in the healthcare_data table.
+            ##Key Context Usage Rules:
+            - ALWAYS call retrieve_territory_context FIRST with the user's natural language question to get schema details.
+            - Use the retrieved context to identify:
+            * Correct column names (e.g., "focus" → potential_uplift_index, churn_risk_score)
+            * Appropriate aggregations (e.g., GROUP BY territory_id)
+            - The context contains canonical SQL examples - adapt them to the user's specific question
+
+            ##Workflow (FOLLOW THIS ORDER):
+            1. Parse the question
+            2. Retrieve schema context (RAG)
+            3. Plan SQL query
+            4. Execute query
+            5. Interpret results
+
+            ##Rules:
+            - **Use retrieve_territory_context tool to understand table schema based on NLQ and build the query 
+            - **Territory Discovery**: Use `GROUP BY territory_id` when user asks "which territory"
+            - **Never Hardcode IDs**: Unless user explicitly provides territory_id/hcp_id
             - Include the data source table name also from where the data fetched
             - Use conditions matching NLQ intent (competitor rise, access good, high uplift).
             - For “good access”, interpret as:
@@ -121,14 +212,14 @@ def create_agent():
                 comp_share_28d_delta > 0 OR comp_detail_60d_cnt > 0
             - For unknown territories, group results by territory_id and rank territories.
             - Always produce SQL that can run directly on Redshift.
+            - normalize priority_score between 0-100.
             - Final output to user must include: ranked list + reason codes + short explanation.
 
             You must call only the execute_redshift_sql tool to fetch data.
             Never invent data.
-            Never return SQL unless calling the tool.
 
         """,
-        tools= get_full_tools_list(mcp_client),
+        tools= get_full_tools_list(mcp_client) + [retrieve_territory_context]
     )
 
 
@@ -152,4 +243,4 @@ def run_main_agent(payload: dict = {}):
 # ---------------------------------------------------
 if __name__ == "__main__":
     app.run()
-    #run_main_agent()
+

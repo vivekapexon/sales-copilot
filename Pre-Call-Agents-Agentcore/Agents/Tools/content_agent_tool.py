@@ -3,10 +3,30 @@ import os
 import boto3
 import pandas as pd
 import io
-from typing import List, Any, Dict
+from typing import List, Any, Dict, Union
 from strands import  tool
 
 # --- Helpers ---
+
+def get_parameter_value(parameter_name):
+    """Fetch an individual parameter by name from AWS Systems Manager Parameter Store.
+
+    Returns:
+        str or None: The parameter value (decrypted if needed) or None on error.
+
+    Notes:
+      - This helper reads configuration from SSM Parameter Store. Example usage in this module:
+          get_parameter_value("EDC_DATA_BUCKET") -> returns the S3 bucket name used for EDC files.
+    """
+    try:
+        ssm_client = boto3.client("ssm", region_name="us-east-1")
+        response = ssm_client.get_parameter(Name=parameter_name, WithDecryption=True)
+        return response["Parameter"]["Value"]
+    except Exception as e:
+        print(f"Error fetching parameter {parameter_name}: {str(e)}")
+        return None
+
+
 def _is_s3_url(u: str) -> bool:
     """
     Return True if the given string is an S3 URL of the form 's3://...'.
@@ -42,53 +62,47 @@ def _extract_percent(text: str) -> float:
 
     return 0.0
 
+
 @tool
-def read_personalized_csv(url: str = "", csv_content_limit: int = 10) -> List[Dict[str, Any]]:
+def read_personalized_csv(HCP_ID: Union[str, List[str], None] = None) -> List[Dict[str, Any]]:
     """
-    Load a CSV file from an S3 URL.
-    with the application.
-
-    Use this tool when the user wants to load HCP/CRM data, records, or any other
-    structured dataset that is stored in CSV format. The tool supports below data
-    sources in order of priority:
-        1. An S3 URL (starting with s3://)
- 
-
-    Parameters:
-        url: A string representing either:
-            - An S3 URL of the form "s3://bucket-name/path/to/file.csv"
-        csv_content_limit: A integer representing limit of csv data to be passed to llm.
-
-    Behavior:
-        - If `url` is an S3 URL:
-            * Validates AWS credentials via STS.
-            * Reads the CSV from S3.
-
     Returns:
-        A list of dictionaries, where each dictionary corresponds to a row in
-        the CSV, with all values coerced to strings and missing values replaced
-        with empty strings.
-
-    Raises:
-        RuntimeError: If AWS credentials are missing/invalid or if an S3 read error occurs.
-        FileNotFoundError: If the file cannot be located in S3
+     
+      - Single row (if HCP_ID = "HCP1003")
+      - Multiple rows (if HCP_ID = ["HCP1001","HCP1002"])
     """
-
-    # --- 1. Load from S3 ---
-    if _is_s3_url(url):
+    url=get_parameter_value("CS_CONTENT_AGENT_S3_CSV_URL")
+    # --- Load from S3 ---
+    if _is_s3_url(url): # type: ignore
         print(f"Using S3 for csv file: {url}")
-        without_prefix = url[len("s3://"):]
+        without_prefix = url[len("s3://"):]# type: ignore
         bucket, key = without_prefix.split("/", 1)
 
         try:
-            s3 = boto3.client("s3",region_name='us-east-1')
+            s3 = boto3.client("s3", region_name="us-east-1")
             obj = s3.get_object(Bucket=bucket, Key=key)
 
-            raw_bytes = obj["Body"].read()  # read correct buffer
-            df = pd.read_csv(io.BytesIO(raw_bytes), dtype=str)[:csv_content_limit]
+            raw_bytes = obj["Body"].read()
+            df = pd.read_csv(io.BytesIO(raw_bytes), dtype=str)
             df = df.fillna("")
 
-            return df.to_dict(orient="records")  # type: ignore
+            # -------------------------------
+            # Apply HCP filtering logic
+            # -------------------------------
+            if HCP_ID is None or HCP_ID == "" or HCP_ID == []:
+                return df.to_dict(orient="records")#type:ignore
+
+            # Convert comma-separated string to list
+            if isinstance(HCP_ID, str):
+                if "," in HCP_ID:
+                    HCP_ID = [x.strip() for x in HCP_ID.split(",")]
+                else:
+                    HCP_ID = [HCP_ID]
+
+            # Filter using the actual column name "hcp_id"
+            filtered_df = df[df["hcp_id"].isin(HCP_ID)]
+
+            return filtered_df.to_dict(orient="records")#type:ignore
 
         except s3.exceptions.NoSuchKey:
             raise FileNotFoundError(f"S3 key not found: s3://{bucket}/{key}")
@@ -97,10 +111,8 @@ def read_personalized_csv(url: str = "", csv_content_limit: int = 10) -> List[Di
         except Exception as e:
             raise RuntimeError(f"Error reading S3 CSV: {e}")
 
-    # --- 4. Nothing found ---
-    raise FileNotFoundError(
-        f"No CSV found Provide an S3 URL."
-    )
+    raise FileNotFoundError("No CSV found. Provide an S3 URL.")
+
 
 @tool
 def analyze_hcps(records: List[Dict[str, Any]], hcp_ids: List[str]) -> List[Dict[str, Any]]:

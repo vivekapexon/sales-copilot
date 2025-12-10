@@ -50,6 +50,7 @@ content_agent = Agent(
 
     Output:
     - ONLY return a valid JSON array of analyzed HCPs sorted by score/rank descending.
+    - Include the data source table name also from where the data fetched
     - Each item must be: 
       {"hcp_id": str, "score": float, "rank": int, "reason": str, "details": dict}
 

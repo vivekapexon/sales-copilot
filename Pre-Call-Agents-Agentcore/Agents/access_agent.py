@@ -1,5 +1,5 @@
 import os
-from strands import Agent
+from strands import Agent, tool
 import boto3
 import asyncio
 import re

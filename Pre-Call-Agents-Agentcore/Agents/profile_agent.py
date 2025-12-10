@@ -140,6 +140,7 @@ def create_profile_agent():
 
             Strict Output Rules:
             - Always return the final answer as a simple JSON object as per user request.
+            - Include the data source table name also from where the data fetched
             - No need to print all columns just display the columns which shows the details asked in the prompt.
             - If multiple rows, return as list of dicts.
             - If single metric, return as key-value pair.
@@ -179,5 +180,5 @@ def run_main_agent(payload: dict = {}):
 # 5) Run Locally
 # ---------------------------------------------------
 if __name__ == "__main__":
-    app.run()
-    # run_main_agent()
+    #app.run()
+    run_main_agent()

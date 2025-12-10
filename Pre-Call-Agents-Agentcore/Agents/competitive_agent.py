@@ -264,6 +264,7 @@ You MUST always return a dictionary with the following structure:
 JSON BLOCK RULES:
 - Use EXACT keys from GLOBAL_SIGNALS (no additional fields).
 - Use snake_case keys only.
+- Include the data source table name also from where the data fetched
 - NO nested objects unless the dataset contains nested objects (your dataset does not).
 - You MUST include the citation object exactly as it appears in GLOBAL_SIGNALS:
   "citation": {"ref": "...", "row_index": ...}

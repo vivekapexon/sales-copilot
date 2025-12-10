@@ -89,7 +89,6 @@ def create_streamable_http_transport(mcp_url: str, access_token: str):
         mcp_url, headers={"Authorization": f"Bearer {access_token}"}
     )
 
-
 def get_full_tools_list(client):
     """List all tools from MCP Gateway (supports pagination)."""
     tools = []
@@ -149,6 +148,7 @@ STEP B: After getting rows from execute_redshift_sql:
 
 STEP C: Output ONLY the final JSON object with top-level keys:
 - Always return only the final JSON as mentioned below and user readable short summary based on Prompt.
+- Include the data source table name also from where the data fetched
   {{
     "HcpId": "<id>",
     "Doctor Name":"<first_name, last_name>",
@@ -162,6 +162,7 @@ STEP C: Output ONLY the final JSON object with top-level keys:
       Brand adoption journey: "<adoption_stage_ordinal> (0: "Aware / Non-user", 1: "Considering", 2: "Trialing", 3: "Adopting", 4: "Champion", 5: "Regular User") Just print labels"
     }}
   }}
+
 
 --- Query Patterns ---
 - For general retrieval: SELECT * FROM healthcare_data LIMIT 50;

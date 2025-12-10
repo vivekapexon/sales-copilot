@@ -111,6 +111,7 @@ def create_agent():
 
             Rules:
             - Only use columns that exist in the healthcare_data table.
+            - Include the data source table name also from where the data fetched
             - Use conditions matching NLQ intent (competitor rise, access good, high uplift).
             - For “good access”, interpret as:
                 formulary_tier_score <= 2 AND

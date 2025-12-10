@@ -1,19 +1,22 @@
 #/Strategy_Agent/strategy_agent.py
 import json
+from strands import Agent,tool
 from strands import Agent
-from .Agents import profile_agent
-from .Agents import prescribe_agent
-from .Agents import history_agent
-from .Agents import access_agent
-from .Agents import competitive_agent
-from .Agents import content_agent
-from .Agents import territory_agent
+from Agents.profile_agent import agent as profile_agent
+from Agents.prescribe_agent import agent as priscribe_agent
+from Agents.history_agent import history_agent 
+from Agents.access_agent import agent as access_agent
+from Agents.competitive_agent import agent as competitive_agent
+from Agents.content_agent import  content_agent
+from Agents.territory_agent import agent as territory_agent
+from bedrock_agentcore.runtime import BedrockAgentCoreApp
 
+app = BedrockAgentCoreApp()
 
 # ----------------------
 # Agent prompt (UPDATED WITH INTENT CLASSIFICATION)
 # ----------------------
-STRATEGY_AGENT_PROMPT = f"""
+STRATEGY_AGENT_PROMPT = """
 You are the Strategy Agent. You intelligently classify user intent and call ONLY the necessary agents.
 You NEVER call agents that are not required for the specific user question.
 
@@ -32,6 +35,13 @@ This list is FINAL, EXHAUSTIVE, and CLOSED:
 
 NO other tool and agents exists.
 You must NOT create, assume, infer, rename, insert, extend, or invent ANY additional agents or analysis beyond these six tools.
+
+Rules:
+- DO NOT ADD ANY EXTRA CHARACTERS OR WORDS LIKE "```json" BEFORE AND AFTER THE JSON OUTPUT.
+- Add citation also in the final agent responce in citetion key e.g. ('citation':'source of data from which agent')
+- Do not add any extra information or explanation from your end like agent name on output just follow json output.
+- Do not modify the output from the agents.
+- DO NOT modify agent outputs. Return them as-is in JSON.
 
 ============================================================
 STEP 1: INTENT CLASSIFICATION (DO THIS FIRST)
@@ -288,6 +298,7 @@ Maintain JSON structure from each agent response.
 ============================================================
 STRICT NEGATIVE RULES (NON-NEGOTIABLE)
 ============================================================
+• Do not output apart from "Output Strict Format" even If the user asks and reply politely saying "I am bound to respond in JSON format. Maintain this rule for genral questions as well like Hii, Hello, etc."
 • Do not used other table from your end just follows agent execution and mentioned tables only
 • Do NOT call agents outside the 6 listed above.
 • Do NOT call agents not required for the intent.
@@ -328,46 +339,82 @@ FAIL-SAFE LOGIC
 =======================================================================
 OUTPUT FORMAT (STRICT)
 ======================================================================= 
-For each executed tool, output in the EXACT structure below:
------------------------------------------------------------
-Always follow this exact strict output format:
+{
+  "description":  "Give a small description of the doctor first.",
+  "summary": "5-7 lines of summary",
+  "key_points": 
+    {
+        "heading": "heading",
+        "info": "info"
+    },
+    {
+        "heading": "heading",
+        "info": "info"
+    }
+    ,
+  "key_insights": "key insights",
+  "citation":"data source from agents"
+}
 
-1. DISCRIPTIONS
-   - Give the small discription of Doctor first.
-
-2. SUMMARY  
-   - Write a 5-7 lines of summary ONLY based on the data that you fetch from DB.  
-   - No external reasoning or added information.
-   - NO need to used explicitely another tables, just used tables that mentioned in agents itself.
-
-3. KEY POINTS
-   - No need to print explicitely. If needed then prints because in other section we used same details.
-   - When you print any key points print it in meaningful format so user can understand.
-
-4. KEY INSIGHTS  
-   - Give insights in 2-3 lines.
-   - Provide insights ONLY from the table and the user’s request.  
-   - Do not invent or add anything beyond the table content.
-
-Hard Rules:  
-- Do not follow this output format every user query, depends on query you need choose those format.
-- If user does not ask for table explicitely, please does not give provide output in tabular format unitl and unless it is required.
-- Do not print any symbols and signs.
-- Do not change or reinterpret tool outputs.  
-- Do not print anything except the summaryr → key points → required table → summary → insights.  
-- If user asks for tabular output, respond ONLY in table format. 
-- No extra commentary, no explanations, no additional sections.
-
-END.
-----------------------------------------------------------------
-========================================================================
 """
 
+@tool
+def profile_agent_tool(intent: str) -> list[dict]:
+    """
+    NL Agent tool to interpret natural language intents and retrieve competitive intelligence data.
+    """
+    print("intent received",intent)
+    return profile_agent(intent)
+@tool
+def prescribe_agent_tool(intent: str) -> list[dict]:
+    """
+    NL Agent tool to interpret natural language intents and retrieve competitive intelligence data.
+    """
+    print("intent received",intent)
+    return priscribe_agent(intent)
+@tool
+def history_agent_tool(intent: str) -> list[dict]:
+    """
+    NL Agent tool to interpret natural language intents and retrieve competitive intelligence data.
+    """
+    print("intent received",intent)
+    return history_agent(intent)
+@tool
+def access_agent_tool(intent: str) -> list[dict]:
+    """
+    NL Agent tool to interpret natural language intents and retrieve competitive intelligence data.
+    """
+    print("intent received",intent)
+    return access_agent(intent)
+@tool
+def competitive_agent_tool(intent: str) -> list[dict]:
+    """
+    NL Agent tool to interpret natural language intents and retrieve competitive intelligence data.
+    """
+    print("intent received",intent)
+    return competitive_agent(intent)
+@tool
+def content_agent_tool(intent: str) -> list[dict]:
+    """
+    NL Agent tool to interpret natural language intents and retrieve competitive intelligence data.
+    """
+    print("intent received",intent)
+    return content_agent(intent)
+@tool
+def territory_agent_tool(intent: str) -> list[dict]:
+    """
+    NL Agent tool to interpret natural language intents and retrieve competitive intelligence data.
+    """
+    print("intent received",intent)
+    return territory_agent(intent)
+ 
 # ----------------------
 # Agent tools list
 # ----------------------
+# def _tools_list():
+#     return [profile_agent, prescribe_agent, history_agent, access_agent, competitive_agent, content_agent, territory_agent]
 def _tools_list():
-    return [profile_agent, prescribe_agent, history_agent, access_agent, competitive_agent, content_agent, territory_agent]
+    return [profile_agent_tool, prescribe_agent_tool, history_agent_tool, territory_agent_tool, access_agent_tool, content_agent_tool, competitive_agent_tool]
 
 # ----------------------
 # CREATE AGENT
@@ -379,25 +426,20 @@ def create_strategy_agent():
     )
 
 agent = create_strategy_agent()
-
-# ----------------------
-# Runner
-# ----------------------
-def run_strategy_agent(nlq: str):
-    """
-    Main entry point.
-    1. Classify intent
-    2. Pass to agent with context
-    3. Return parsed result
-    """
-    instruction = nlq
-    agent_result = agent(instruction)
+# ---------------------------------------------------
+# 4) Main Workflow
+# ------------------------------------------------
+@app.entrypoint
+def run_main_agent(payload: dict = {}):
+    payload = payload.get("prompt", "Give me the details of HCP1001")
+    agent_result = agent(payload)
     return agent_result
 
-# ----------------------
-# Example usage (local)
-# ----------------------
-if __name__ == "__main__":    
-    # Run actual agent
-    user_prompt = input("Enter your prompt: ")
-    result = run_strategy_agent(user_prompt)
+
+# ---------------------------------------------------
+# 5) Run Locally
+# ---------------------------------------------------
+if __name__ == "__main__":
+    app.run()
+    # run_main_agent()
+

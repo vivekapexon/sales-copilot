@@ -18,9 +18,7 @@ from bedrock_agentcore.identity.auth import requires_access_token
 from strands.tools.mcp.mcp_client import MCPClient
 from mcp.client.streamable_http import streamablehttp_client
 
-
 app = BedrockAgentCoreApp()
-
 
 def get_parameter_value(parameter_name):
     """Fetch an individual parameter by name from AWS Systems Manager
@@ -180,6 +178,7 @@ def create_history_agent() -> Agent:
                     "call_date": "2025-08-12"
                 }}
         - Do NOT add any extra columns details,  commentary or explanation.
+        - Include the data source table name also from where the data fetched
  
         Query Patterns:
         - For general retrieval: SELECT * FROM history_mart LIMIT 50;

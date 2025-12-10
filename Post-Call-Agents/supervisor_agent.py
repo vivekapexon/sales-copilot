@@ -1,10 +1,10 @@
 # /post_call/supervisor_agent.py
 from strands import Agent
-from .Agents import action_agent as action_agent
-from .Agents import sentiment_agent as sentiment_agent
-from .Agents import structure_agent as structure_agent
-from .Agents import transcription_agent as transcription_agent
-from .Agents import compilance_agent as compilance_agent 
+from Agents import action_agent as action_agent
+from Agents import sentiment_agent as sentiment_agent
+from Agents import structure_agent as structure_agent
+from Agents import transcription_agent as transcription_agent
+from Agents import compilance_agent as compilance_agent 
 
 # ----------------------
 # Supervisor / Orchestrator

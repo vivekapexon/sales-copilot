@@ -23,7 +23,6 @@ from opensearchpy import OpenSearch, RequestsHttpConnection, AWSV4SignerAuth
 # Basic config
 # ----------------------------
 REGION = "us-east-1"
-WORKLOAD_NAME = "Sales-Copilet-Agents"  # keep same name as other agents
 
 app = BedrockAgentCoreApp()
 model = BedrockModel()
@@ -54,7 +53,7 @@ def get_parameter_value(parameter_name):
             bucket name used for EDC files.
     """
     try:
-        ssm_client = boto3.client("ssm", region_name="us-east-1")
+        ssm_client = boto3.client("ssm", region_name=REGION)
         response = ssm_client.get_parameter(
             Name=parameter_name, WithDecryption=True
             )
@@ -67,7 +66,6 @@ def get_parameter_value(parameter_name):
 # Parameters / S3 config
 # ----------------------------
 CONTENT_AGENT_S3_CSV_URL = get_parameter_value("CS_CONTENT_AGENT_S3_CSV_URL")
-
 SALES_COPILOT_BEDROCK_EMBED_MODEL = get_parameter_value("SALES_COPILOT_BEDROCK_EMBED_MODEL")
 SALES_COPILOT_AOSS_ENDPOINT = get_parameter_value("SALES_COPILOT_AOSS_ENDPOINT")
 SALES_COPILOT_INDEX_NAME = get_parameter_value("SALES_COPILOT_INDEX_NAME")
@@ -237,7 +235,7 @@ def read_personalized_csv(HCP_ID: Union[str, List[str], None] = None) -> List[Di
         bucket, key = without_prefix.split("/", 1)
 
         try:
-            s3 = boto3.client("s3", region_name="us-east-1")
+            s3 = boto3.client("s3", region_name=REGION)
             obj = s3.get_object(Bucket=bucket, Key=key)
 
             raw_bytes = obj["Body"].read()
@@ -512,15 +510,9 @@ def run_main_agent(payload: dict = {}) -> Dict[str, Any]:
     )
     agent_result = agent(instruction)  # type: ignore
 
-    # If you want to enforce JSON-only response, you can normalize here:
-    # try:
-    #     text = agent_result.message["content"][0]["text"]
-    #     return json.loads(text)
-    # except Exception:
-    #     return {"status": "error", "raw": str(agent_result)}
-
     return agent_result
 
 
 if __name__ == "__main__":
     app.run()
+    #run_main_agent()

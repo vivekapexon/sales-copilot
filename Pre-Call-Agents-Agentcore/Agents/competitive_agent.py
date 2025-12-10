@@ -1,6 +1,3 @@
-# competitive_agent.py
-
-
 import os
 import io
 import json

@@ -2,7 +2,7 @@ import re
 import os
 import asyncio
 import boto3
-from strands import Agent
+from strands import Agent, tool
 from bedrock_agentcore.runtime import (
     BedrockAgentCoreApp, BedrockAgentCoreContext
     )
@@ -10,7 +10,11 @@ from bedrock_agentcore.services.identity import IdentityClient
 from bedrock_agentcore.identity.auth import requires_access_token
 from strands.tools.mcp.mcp_client import MCPClient
 from mcp.client.streamable_http import streamablehttp_client
+from opensearchpy import AWSV4SignerAuth 
+from opensearchpy import OpenSearch, RequestsHttpConnection
+import json
 
+AWS_REGION = "us-east-1"
 
 app = BedrockAgentCoreApp()
 
@@ -41,6 +45,33 @@ def get_parameter_value(parameter_name):
     except Exception as e:
         print(f"Error fetching parameter {parameter_name}: {str(e)}")
         return None
+
+BEDROCK_EMBED_MODEL = get_parameter_value("SALES_COPILOT_BEDROCK_EMBED_MODEL")
+
+bedrock_client = boto3.client(service_name="bedrock-runtime", region_name=AWS_REGION)
+
+app = BedrockAgentCoreApp()
+
+SC_AOSS_ENDPOINT = get_parameter_value("SALES_COPILOT_AOSS_ENDPOINT")
+SC_HCP_AOSS_INDEX = get_parameter_value("SC_HCP_AOSS_INDEX")
+
+def _aoss_client():
+    region = AWS_REGION
+    endpoint = SC_AOSS_ENDPOINT
+    if not endpoint:
+        return None
+    # strip scheme for OpenSearch(hosts=[{"host": ..., "port": 443}])
+    auth = AWSV4SignerAuth(boto3.Session().get_credentials(), region, service="aoss")
+    return OpenSearch(
+        hosts=[{"host": endpoint.replace("https://",""), "port": 443}],
+        http_auth=auth, use_ssl=True, verify_certs=True,
+        connection_class=RequestsHttpConnection
+    )
+
+opensearch_client = _aoss_client()
+INDEX_NAME = SC_HCP_AOSS_INDEX
+
+
 
 
 def _parse_scopes(s: str) -> list[str]:
@@ -102,6 +133,55 @@ def get_full_tools_list(client):
         pagination_token = result.pagination_token
     return tools
 
+@tool
+def retrieve_profile_context(query: str, top_k: int = 10, size: int = 100) -> dict:
+    """
+    Retrieve relevant curated schema context chunks from OpenSearch Serverless (AOSS)
+    using Bedrock embeddings.
+    """
+    if not opensearch_client:
+        return "OpenSearch Serverless endpoint not configured. Set NL_OPENSEARCH_SERVERLESS_ENDPOINT."
+
+    # Step 1: Embed the query using configured model
+    try:
+        response = bedrock_client.invoke_model(
+            modelId=BEDROCK_EMBED_MODEL,
+            body=json.dumps({"inputText": query}),
+        )
+        response_body = json.loads(response["body"].read())
+        query_vector = (
+            response_body.get("embedding")
+            or response_body.get("outputTextEmbedding", {}).get("embedding")
+        )
+        if not query_vector:
+            return "Failed to extract embedding vector from Bedrock embedding response."
+    except Exception as e:
+        return f"Bedrock embedding error: {e}"
+
+    # Step 2: k-NN vector search in AOSS
+    try:
+        search_body = {
+            "size": size,
+            "query": {
+                "knn": {
+                    "embedding": {
+                        "vector": query_vector,
+                        "k": top_k
+                    }
+                }
+            }
+        }
+        resp = opensearch_client.search(index=INDEX_NAME, body=search_body)
+    except Exception as e:
+        return f"AOSS search error: {e}"
+
+    # Step 3: Collect context chunks
+    hits = resp.get("hits", {}).get("hits", [])
+    if not hits:
+        return "No relevant context found."
+
+    chunks = [h["_source"]["text"] for h in hits if "_source" in h and "text" in h["_source"]]
+    return "\n---\n".join(chunks)
 
 # ---------------------------------------------------
 # 2) Agent Definition
@@ -120,43 +200,42 @@ def create_profile_agent():
     mcp_client.__enter__()
     return Agent(
         system_prompt=f"""
+            ##Role:
             You are the ProfileAgent.
             Your task is to generate PostgreSQL SELECT queries from natural-language user prompts.
 
-            Rules:
-            1. The table name is `healthcare_data`.
-            2. You must only use these allowed columns:
-            {", ".join(HCP_SCHEMA_COLUMNS)}
-            3. Always produce a valid PostgreSQL SQL query.
-            4. Never guess values not mentioned. If value is unclear, use placeholders:
-                {{value}}
-            5. Just select specific columns needed to answer the prompt, do NOT use SELECT *.
-            6. stored this SQL query in the variable `sql_query`.
-            7. Pass created SQL query to the tool `execute_redshift_sql(sql_query)` for execution.
-            8. If user asks for something impossible with the schema, return:
-            {{
-                "sql_query": "UNSUPPORTED_QUERY"
-            }}
+            ##Key Context Usage Rules:
+            - ALWAYS call retrieve_profile_context FIRST based on the user's natural language question to get schema details.
+            - Use the retrieved context to identify:
+            * Correct column names and information
 
-            Strict Output Rules:
+            ##Workflow (FOLLOW THIS ORDER):
+            1. Parse the question
+            2. Retrieve schema context (RAG)
+            3. Plan SQL query
+            4. Execute query
+            5. Interpret results
+
+            ##Rules:
+            - **Use retrieve_territory_context tool to understand table schema based on NLQ and build the query 
+            - Always produce a valid PostgreSQL SQL query.
+            - Pass created SQL query to the tool `execute_redshift_sql(sql_query)` for execution.
+
+            ##Strict Output Rules:
             - Always return the final answer as a simple JSON object as per user request.
             - Include the data source table name also from where the data fetched
-            - No need to print all columns just display the columns which shows the details asked in the prompt.
-            - If multiple rows, return as list of dicts.
-            - If single metric, return as key-value pair.
-            - Add simple two liner explanations if needed.
             - No other columns except those requested,No SQL, no logs.
 
-            Query Patterns:
-            - For general retrieval: SELECT * FROM healthcare_data LIMIT 50;
-            - For filtering: SELECT * FROM healthcare_data WHERE <condition>;
+            ##Query Patterns:
+            - For general retrieval: SELECT * FROM table name LIMIT 50;
+            - For filtering: SELECT * FROM table name WHERE <condition>;
             - For sorting: ORDER BY <column> ASC/DESC;
-            - For aggregations: SELECT <col>, COUNT(*) FROM healthcare_data GROUP BY <col>;
+            - For aggregations: SELECT <col>, COUNT(*) FROM table name GROUP BY <col>;
             - Multi-condition: Use AND / OR explicitly.
             
             You must always generate the most reasonable SQL based on the user's text.
         """,
-        tools=get_full_tools_list(mcp_client),
+        tools= get_full_tools_list(mcp_client) + [retrieve_profile_context]
     )
 
 
@@ -180,5 +259,5 @@ def run_main_agent(payload: dict = {}):
 # 5) Run Locally
 # ---------------------------------------------------
 if __name__ == "__main__":
-    #app.run()
-    run_main_agent()
+    app.run()
+

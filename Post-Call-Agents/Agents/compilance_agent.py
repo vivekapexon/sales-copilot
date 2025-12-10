@@ -324,5 +324,5 @@ def run_main_agent(payload: dict = {}):
 # 5) Run Locally
 # ---------------------------------------------------
 if __name__ == "__main__":
-    #app.run()
-    run_main_agent()
+    app.run()
+    #run_main_agent()

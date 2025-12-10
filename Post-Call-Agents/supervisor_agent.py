@@ -1,5 +1,5 @@
 # /post_call/supervisor_agent.py
-from strands import Agent
+from strands import Agent, tool
 from Agents.action_agent import agent as action_agent
 from Agents.sentiment_agent import agent as sentiment_agent
 from Agents.structure_agent import agent as structure_agent
@@ -158,7 +158,6 @@ STEP 4: MERGE & STRUCTURE OUTPUT
 ============================================================
 Combine outputs from called agents ONLY.
 Do not invent data from agents you didn't call.
-Maintain JSON structure from each agent response.
 If transcription was fetched internally, pass it downstream but do not duplicate in final output unless requested.
 ============================================================
 STRICT NEGATIVE RULES (NON-NEGOTIABLE)
@@ -190,58 +189,37 @@ FAIL-SAFE LOGIC
 =======================================================================
 OUTPUT FORMAT (STRICT)
 =======================================================================
-For each executed tool, output in the EXACT structure below:
------------------------------------------------------------
-Always follow this exact strict output format:
- 
-1. DISCRIPTIONS
+Output Rules:
+- Use MARKDOWN format ONLY.
+- Structure output into these sections:
+
+### 1. DISCRIPTIONS
    - Give the small discription of Doctor first.
  
-2. SUMMARY  
+### 2. SUMMARY  
    - Write a 5-7 lines of summary ONLY based on the data that you fetch from DB.  
    - No external reasoning or added information.
    - NO need to used explicitely another tables, just used tables that mentioned in agents itself.
  
-3. KEY POINTS
+### 3. KEY POINTS 
    - No need to print explicitely. If needed then prints because in other section we used same details.
    - When you print any key points print it in meaningful format so user can understand.
  
-4. KEY INSIGHTS  
+###4. KEY INSIGHTS 
    - Give insights in 2-3 lines.
    - Provide insights ONLY from the table and the user’s request.  
    - Do not invent or add anything beyond the table content.
- 
-Hard Rules:  
-- Do not follow this output format every user query, depends on query you need choose those format.
-- If user does not ask for table explicitely, please does not give provide output in tabular format unitl and unless it is required.
-- Do not print any symbols and signs.
-- Do not change or reinterpret tool outputs.  
-- Do not print anything except the summaryr → key points → required table → summary → insights.  
-- If user asks for tabular output, respond ONLY in table format.
-- No extra commentary, no explanations, no additional sections.
 
-----------------------------------------------------------------
+### 5. CITATION
+   - Provide the source of data from which you fetched the information in citation key.
+
+
+###  Table heading (If needed to show data in table format)
+| hcp_id | territory_id | total_rx_28d | comp_share_28d_delta | formulary_tier_score | priority_score | reason_codes |
+|--------|--------------|--------------|----------------------|---------------------|----------------|--------------|
+| HCP009 | T-215        | 132          | +2.1%                | 2                   | 92             | GOOD_ACCESS, HIGH_RX |
 ========================================================================
 
-ADDITIONAL REQUIREMENT: CITATION SECTION (MANDATORY)
-----------------------------------------------------------------
-At the END of the final merged output, ALWAYS add:
-
-CITATIONS:
-List each data source used in the answer, including:
-- Which agent outputs provided the information
-- Any DB tables referenced by those agents
-- Any files returned by agents (e.g., file_id, transcript file name)
-
-Format:
-CITATIONS:
-- Source 1: - <Data/File/Table used>
-- Source 2: - <Data/File/Table used>
-...
-
-You MUST NOT invent sources. Only list the actual agents and files you used.
-
-=======================================================================
 ABSOLUTE NO-THINKING-OUT-LOUD RULE
 ----------------------------------
 You must NEVER reveal internal reasoning, deliberation, assumptions,
@@ -272,28 +250,29 @@ def action_agent_tool(intent: str) -> list[dict]:
     """
     print("intent received",intent)
     return action_agent(intent)#type:ignore
-@tool#type:ignore
+
+@tool
 def sentiment_agent_tool(intent: str) -> list[dict]:
     """
     NL Agent tool to interpret natural language intents and retrieve competitive intelligence data.
     """
     print("intent received",intent)
     return sentiment_agent(intent)#type:ignore
-@tool#type:ignore
+@tool
 def structure_agent_tool(intent: str) -> list[dict]:
     """
     NL Agent tool to interpret natural language intents and retrieve competitive intelligence data.
     """
     print("intent received",intent)
     return structure_agent(intent)#type:ignore
-@tool#type:ignore
+@tool
 def transcription_agent_tool(intent: str) -> list[dict]:
     """
     NL Agent tool to interpret natural language intents and retrieve competitive intelligence data.
     """
     print("intent received",intent)
     return transcription_agent(intent)#type:ignore
-@tool#type:ignore
+@tool
 def compilance_agent_tool(intent: str) -> list[dict]:
     """
     NL Agent tool to interpret natural language intents and retrieve competitive intelligence data.

@@ -7,7 +7,7 @@ from Agents.prescribe_agent import agent as priscribe_agent
 from Agents.history_agent import history_agent 
 from Agents.access_agent import agent as access_agent
 from Agents.competitive_agent import agent as competitive_agent
-from Agents.content_agent import  content_agent
+from Agents.content_agent import agent as content_agent
 from Agents.territory_agent import agent as territory_agent
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
 
@@ -37,11 +37,10 @@ NO other tool and agents exists.
 You must NOT create, assume, infer, rename, insert, extend, or invent ANY additional agents or analysis beyond these six tools.
 
 Rules:
-- DO NOT ADD ANY EXTRA CHARACTERS OR WORDS LIKE "```json" BEFORE AND AFTER THE JSON OUTPUT.
 - Add citation also in the final agent responce in citetion key e.g. ('citation':'source of data from which agent')
-- Do not add any extra information or explanation from your end like agent name on output just follow json output.
+- Do not add any extra information or explanation
 - Do not modify the output from the agents.
-- DO NOT modify agent outputs. Return them as-is in JSON.
+
 
 ============================================================
 STEP 1: INTENT CLASSIFICATION (DO THIS FIRST)
@@ -293,12 +292,11 @@ STEP 4: MERGE & STRUCTURE OUTPUT
 ============================================================
 Combine outputs from called agents ONLY.
 Do not invent data from agents you didn't call.
-Maintain JSON structure from each agent response.
+
 
 ============================================================
 STRICT NEGATIVE RULES (NON-NEGOTIABLE)
 ============================================================
-• Do not output apart from "Output Strict Format" even If the user asks and reply politely saying "I am bound to respond in JSON format. Maintain this rule for genral questions as well like Hii, Hello, etc."
 • Do not used other table from your end just follows agent execution and mentioned tables only
 • Do NOT call agents outside the 6 listed above.
 • Do NOT call agents not required for the intent.
@@ -339,22 +337,35 @@ FAIL-SAFE LOGIC
 =======================================================================
 OUTPUT FORMAT (STRICT)
 ======================================================================= 
-{
-  "description":  "Give a small description of the doctor first.",
-  "summary": "5-7 lines of summary",
-  "key_points": 
-    {
-        "heading": "heading",
-        "info": "info"
-    },
-    {
-        "heading": "heading",
-        "info": "info"
-    }
-    ,
-  "key_insights": "key insights",
-  "citation":"data source from agents"
-}
+Output Rules:
+- Use MARKDOWN format ONLY.
+- Structure output into these sections:
+
+### 1. DISCRIPTIONS
+   - Give the small discription of Doctor first.
+ 
+### 2. SUMMARY  
+   - Write a 5-7 lines of summary ONLY based on the data that you fetch from DB.  
+   - No external reasoning or added information.
+   - NO need to used explicitely another tables, just used tables that mentioned in agents itself.
+ 
+### 3. KEY POINTS 
+   - No need to print explicitely. If needed then prints because in other section we used same details.
+   - When you print any key points print it in meaningful format so user can understand.
+ 
+###4. KEY INSIGHTS 
+   - Give insights in 2-3 lines.
+   - Provide insights ONLY from the table and the user’s request.  
+   - Do not invent or add anything beyond the table content.
+
+### 5. CITATION
+   - Provide the source of data from which you fetched the information in citation key.
+
+
+###  Table heading (If needed to show data in table format)
+| hcp_id | territory_id | total_rx_28d | comp_share_28d_delta | formulary_tier_score | priority_score | reason_codes |
+|--------|--------------|--------------|----------------------|---------------------|----------------|--------------|
+| HCP009 | T-215        | 132          | +2.1%                | 2                   | 92             | GOOD_ACCESS, HIGH_RX |
 
 """
 

@@ -1,11 +1,13 @@
 # /post_call/supervisor_agent.py
 from strands import Agent
-from Agents import action_agent as action_agent
-from Agents import sentiment_agent as sentiment_agent
-from Agents import structure_agent as structure_agent
-from Agents import transcription_agent as transcription_agent
-from Agents import compilance_agent as compilance_agent 
+from Agents.action_agent import agent as action_agent
+from Agents.sentiment_agent import agent as sentiment_agent
+from Agents.structure_agent import agent as structure_agent
+from Agents.transcription_agent import agent as transcription_agent
+from Agents.compilance_agent import agent as compilance_agent 
+from bedrock_agentcore.runtime import BedrockAgentCoreApp
 
+app = BedrockAgentCoreApp()
 # ----------------------
 # Supervisor / Orchestrator
 # ----------------------
@@ -263,8 +265,45 @@ Forbidden:
 # Agent tools list
 # ----------------------
 
+@tool#type:ignore
+def action_agent_tool(intent: str) -> list[dict]:
+    """
+    NL Agent tool to interpret natural language intents and retrieve competitive intelligence data.
+    """
+    print("intent received",intent)
+    return action_agent(intent)#type:ignore
+@tool#type:ignore
+def sentiment_agent_tool(intent: str) -> list[dict]:
+    """
+    NL Agent tool to interpret natural language intents and retrieve competitive intelligence data.
+    """
+    print("intent received",intent)
+    return sentiment_agent(intent)#type:ignore
+@tool#type:ignore
+def structure_agent_tool(intent: str) -> list[dict]:
+    """
+    NL Agent tool to interpret natural language intents and retrieve competitive intelligence data.
+    """
+    print("intent received",intent)
+    return structure_agent(intent)#type:ignore
+@tool#type:ignore
+def transcription_agent_tool(intent: str) -> list[dict]:
+    """
+    NL Agent tool to interpret natural language intents and retrieve competitive intelligence data.
+    """
+    print("intent received",intent)
+    return transcription_agent(intent)#type:ignore
+@tool#type:ignore
+def compilance_agent_tool(intent: str) -> list[dict]:
+    """
+    NL Agent tool to interpret natural language intents and retrieve competitive intelligence data.
+    """
+    print("intent received",intent)
+    return compilance_agent(intent)#type:ignore
+
+
 def _tools_list():
-    return [transcription_agent, structure_agent, compilance_agent , action_agent, sentiment_agent]
+    return [action_agent_tool, sentiment_agent_tool, structure_agent_tool , transcription_agent_tool, compilance_agent_tool]
 
 # ----------------------
 # CREATE AGENT
@@ -281,22 +320,16 @@ agent = create_supervisor_agent()
 # ----------------------
 # Runner
 # ----------------------
-
-def run_supervisor_agent(nlq: str):
-    """
-    Main entry point.
-    1. Classify intent
-    2. Pass to agent with context
-    3. Return parsed result
-    """
-    instruction = nlq
-    agent_result = agent(instruction)
+@app.entrypoint
+def run_supervisor_agent(payload: dict = {}):
+    payload = payload.get("prompt", "Give me the details of HCP1001 from my last call")
+    agent_result = agent(payload)#type:ignore
     return agent_result
 
-# ----------------------
-# Example usage (local)
-# ----------------------
-if __name__ == "__main__":    
-    # Run actual agent
-    user_prompt = input("Enter your prompt: ")
-    result = run_supervisor_agent(user_prompt)
+
+# ---------------------------------------------------
+# 5) Run Locally
+# ---------------------------------------------------
+if __name__ == "__main__":
+    app.run()
+    # run_main_agent()

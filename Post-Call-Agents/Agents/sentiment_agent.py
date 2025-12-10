@@ -1,7 +1,103 @@
 # /post_call/Agents/sentiment_agent.py
-import json
-from strands import Agent
-from .Tools.validate_transcription_tools import validate_transcription_for_sentiment
+import re
+from typing import Dict, Any, Optional
+from strands import tool
+import logging
+from strands import Agent,tool
+
+from bedrock_agentcore.runtime import BedrockAgentCoreApp
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+logger = logging.getLogger("sentiment_agent")
+app = BedrockAgentCoreApp()
+
+# Tokens considered placeholders / not useful
+_PLACEHOLDER_TOKENS = {"[inaudible]", "[noise]", "[silence]", "[unintelligible]"}
+
+NULL_OBJECT = {
+    "call_sentiment_score": None,
+    "sentiment_confidence": None,
+    "receptivity_trend_90d_slope": None,
+    "relationship_stage": None,
+    "objection_intensity_index": None,
+    "positive_to_negative_ratio": None,
+    "next_call_risk_level": None,
+    "notes_tone_summary": None,
+    "data_available": False,
+}
+
+def _is_placeholder_only(text: str) -> bool:
+    """Return True if text contains only placeholder tokens / punctuation / whitespace."""
+    if not text or not text.strip():
+        return True
+    lower = text.strip().lower()
+    # Strip common punctuation and numeric tokens
+    stripped = re.sub(r"[^\w\[\]\s]", " ", lower)
+    tokens = [t for t in re.split(r"\s+", stripped) if t]
+    if not tokens:
+        return True
+    # If all tokens are in placeholder set or numeric / tiny
+    meaningful = [t for t in tokens if t not in _PLACEHOLDER_TOKENS and len(t) > 1]
+    return len(meaningful) == 0
+
+@tool
+def validate_transcription_for_sentiment(transcription_text: Optional[str]) -> Dict[str, Any]:
+    """
+    Validate transcription text for downstream Sentiment/Insight agent.
+
+    Input:
+        transcription_text: raw transcript string (may be None)
+
+    Returns (dict):
+    - If transcription is insufficient, returns the exact NULL_OBJECT (so agent LLM can return the null-object).
+    - If transcription is sufficient, returns a dict:
+        {
+          "data_available": True,
+          "transcription_text": "<original text trimmed>",
+          "transcription_length_chars": <int>,
+          "transcription_length_words": <int>,
+          "placeholder_token_fraction": <float 0-1>
+        }
+
+    Important: This tool DOES NOT call any LLM/agent. It only validates/normalizes text.
+    """
+    # Normalize input
+    if transcription_text is None:
+        return NULL_OBJECT
+
+    # convert to str and trim
+    text = str(transcription_text).strip()
+
+    # Quick length checks
+    if len(text) < 30:
+        return NULL_OBJECT
+
+    # compute token stats
+    words = [w for w in re.split(r"\s+", text) if w]
+    word_count = len(words)
+    char_count = len(text)
+
+    # fraction of placeholder-like tokens
+    lower_words = [w.strip().lower() for w in words]
+    placeholder_count = sum(1 for w in lower_words if w in _PLACEHOLDER_TOKENS)
+    placeholder_fraction = placeholder_count / max(1, word_count)
+
+    # If more than 70% placeholder tokens -> insufficient
+    if placeholder_fraction > 0.7 or _is_placeholder_only(text):
+        return NULL_OBJECT
+
+    # If after heuristics it's borderline short (<30 chars or <5 words) => insufficient
+    if char_count < 30 or word_count < 5:
+        return NULL_OBJECT
+
+    # Passed checks -> return normalized metadata + transcription
+    return {
+        "data_available": True,
+        "transcription_text": text,
+        "transcription_length_chars": char_count,
+        "transcription_length_words": word_count,
+        "placeholder_token_fraction": round(placeholder_fraction, 3),
+    }
+
 
 INSIGHT_EXTRACTION_AGENT_PROMPT = """
 You are the Sentiment and Insight Extraction Agent for HCP sales calls.
@@ -89,7 +185,8 @@ EXECUTION SEQUENCE (MANDATORY)
 You must ALWAYS follow this sequence.
 """
 
-sentiment_agent = Agent(
+def create_sentiment_agent() -> Agent:
+    return Agent(
     name="Sentiment and Insight Extraction Agent",
     system_prompt=INSIGHT_EXTRACTION_AGENT_PROMPT,
 
@@ -97,8 +194,11 @@ sentiment_agent = Agent(
 
 )
 
-if __name__ == "__main__":
-    # Example usage
+agent=create_sentiment_agent()
+
+
+@app.entrypoint
+def run_main_agent(payload: dict = {}):
     query_transcript="""Rep: Hello Dr. Thomas, I appreciate you meeting with me.
             HCP: Thanks, let's keep it brief clinic is busy today.
             Rep: I'd like to focus on real-world outcomes in high-risk cohorts and safety monitoring and lab follow-up best practices today.
@@ -109,4 +209,12 @@ if __name__ == "__main__":
             HCP: Great email the checklists and we'll trial with a patient this week."""
 
 
-    sentiment_agent(query_transcript)
+    payload = payload.get("prompt",query_transcript)
+    agent_result = agent(payload)#type:ignore
+    return agent_result
+# ---------------------------------------------------
+# Run Locally
+# ---------------------------------------------------
+if __name__ == "__main__":
+    app.run()
+    #run_main_agent()

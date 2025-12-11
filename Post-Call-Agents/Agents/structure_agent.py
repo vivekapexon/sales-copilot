@@ -49,7 +49,7 @@ SQL_POLL_MAX_SECONDS = 30.0
 # ----------------------
 # Helper: Redshift Data API tool
 # ----------------------
-@tool
+
 def execute_redshift_sql(sql_query: str, return_results: bool = True) -> Dict[str, Any]:
     """
     Execute arbitrary SQL against Redshift Serverless Data API (workgroup mode).

@@ -38,6 +38,8 @@ def _parse_scopes(s: str) -> list[str]:
 MCP_GATEWAY_URL = get_parameter_value("MCP_GATEWAY_URL")
 OAUTH_PROVIDER_NAME = get_parameter_value("PROVIDER_NAME")
 OAUTH_SCOPE = _parse_scopes(get_parameter_value("SCOPE"))
+TABLE_NAME = get_parameter_value("SC_PRC_HCP_ACESS_FORMULARY_TABLE")
+TABLE_SCHEMA_DESCRIPTION = get_parameter_value("SC_POC_ACTION_TABLE_SCHEMA")
 
 # ---------------------------------------------------
 # 1) Identity & Access Bootstrap
@@ -82,38 +84,6 @@ def get_full_tools_list(client):
         pagination_token = result.pagination_token
     return tools
 
-schema_description = """
-Columns:
-- hcp_id                           VARCHAR(50)      -- e.g., 'HCP1000'
-- territory_id                     VARCHAR(50)      -- e.g., 'US-PA-SE'
-- access_snapshot_datetime         TIMESTAMP        -- e.g., '2025-10-27 08:24:43'
-- recent_formulary_change_30d      VARCHAR(50)      -- NULL or change description
-- current_coverage_tier_overall    SMALLINT         -- 1-4 (1=best, 4=worst)
-- prior_auth_requirement           VARCHAR(50)      -- 'None', 'Some plans', 'All plans'
-- step_therapy_requirement         VARCHAR(50)      -- 'None', 'Some', 'All', 'No'
-- copay_status_median_usd          NUMERIC(20,2)    -- Median copay in USD
-- patient_mix_top3_summary         VARCHAR(300)     -- e.g., 'BCBS 41%, Medicare 26%, Aetna 11%'
-- access_alert_severity            VARCHAR(20)      -- 'None', 'Low', 'Medium', 'High'
-- prior_auth_required_flag         BOOLEAN          -- true/false
-- step_therapy_required_flag       BOOLEAN          -- true/false
-- patient_copay_median_90d         NUMERIC(20,2)    -- 90-day median copay
-- access_change_14d_flag           BOOLEAN          -- Recent access change
-- access_policy_change_7d_flag     BOOLEAN          -- Recent policy change
-- payer_contract_change_30d_flag   BOOLEAN          -- Recent contract change
-- formulary_tier_score             SMALLINT         -- Tier score
-- payer_top1_share_pct             NUMERIC(10,4)    -- Top payer share %
-- payer_top3_share_pct             NUMERIC(10,4)    -- Top 3 payers share %
-- access_friction_index            NUMERIC(10,4)    -- Access difficulty score
-- physician_id                     VARCHAR(50)      -- e.g., 'HCP-0001'
-- product_id                       VARCHAR(50)      -- e.g., 'PROD-001'
-- insurance_plan                   VARCHAR(100)     -- e.g., 'Anthem', 'BCBS'
-- is_covered                       BOOLEAN          -- true/false
-- tier_status                      VARCHAR(50)      -- 'Tier 1', 'Tier 2', 'Not Covered'
-- prior_auth_required              BOOLEAN          -- true/false
-- step_therapy_required            BOOLEAN          -- true/false
-- copay_amount                     NUMERIC(20,2)    -- Copay amount in USD
-- last_updated                     TIMESTAMP        -- Last update timestamp
-"""
 
 def create_agent():
     """
@@ -128,10 +98,10 @@ def create_agent():
           You are the ACCESS INTELLIGENCE AGENT for pharmaceutical sales.
 
           ROLE: Provide formulary/access intelligence (wins/losses, PA/copay)
-          INPUTS: Redshift Formulary Marts (formulary_mart table)
+          INPUTS: Redshift Formulary Marts {TABLE_NAME}
           OUTPUTS: Coverage status updates, actionable opportunities
 
-          {schema_description}
+          {TABLE_SCHEMA_DESCRIPTION}
 
           BUSINESS CONTEXT:
           - HCP = Healthcare Provider (physician)
@@ -155,7 +125,7 @@ def create_agent():
           - High-impact actions based on payer mix and alert severity
           - Specific actionable insights with numbers and context
 
-          ALWAYS use execute_redshift_sql to query formulary_mart table.
+          ALWAYS use execute_redshift_sql to query {TABLE_NAME} table.
           NEVER hallucinate data - only use real results from the tool.
 
           CRITICAL: Return ONLY valid JSON. No explanations, no markdown, no additional text.
@@ -176,8 +146,7 @@ def create_agent():
               "Another actionable insight based on payer mix or barriers"
             ],
             "citation": {{
-              "source": "formulary_mart",
-              "primary_key": {{"column": "hcp_id", "value": "<actual_id>"}}
+              "source": "{TABLE_NAME}"
             }}
           }}
 

@@ -452,5 +452,4 @@ def run_main_agent(payload: dict = {}):
 # ---------------------------------------------------
 if __name__ == "__main__":
     app.run()
-    # run_main_agent()
 

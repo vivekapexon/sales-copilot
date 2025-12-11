@@ -14,7 +14,6 @@ from mcp.client.streamable_http import streamablehttp_client
 # ----------------------
 # Configuration
 # ----------------------
-DATABASE = "sales_copilot_db"
 DEFAULT_SQL_LIMIT = 1000
 
 app = BedrockAgentCoreApp()
@@ -54,7 +53,8 @@ MCP_GATEWAY_URL = get_parameter_value("MCP_GATEWAY_URL")
 OAUTH_PROVIDER_NAME = get_parameter_value("PROVIDER_NAME")
 OAUTH_SCOPE = _parse_scopes(get_parameter_value("SCOPE"))
 ALLOWED_COLUMNS = get_parameter_value("SC_HCP_SCHEMA_COLUMNS")
-
+PRISCRIPTION_HISTORY_TABLR_NAME = get_parameter_value("SC_PRC_HCP_TABLE")
+DATABASE_NAME = get_parameter_value("SC_RS_DATABASE")
 
 # ---------------------------------------------------
 # 1) Identity & Access Bootstrap
@@ -110,7 +110,7 @@ You are the PrescribingAgent.
 
 Your job: given a natural-language query (NLQ) about prescribing or a request to "prepare prescribing intelligence" for an HCP,
 you must:
-  1) Convert the NLQ to a single, safe SQL statement that queries the Redshift Serverless table `healthcare_data` in database `{DATABASE}`.
+  1) Convert the NLQ to a single, safe SQL statement that queries the Redshift Serverless table {PRISCRIPTION_HISTORY_TABLR_NAME} in {DATABASE_NAME}`.
   2) Use ONLY the allowed columns list embedded in your prompt (no other columns, no metadata).
   3) Always include a LIMIT clause when fetching multiple rows (use LIMIT {DEFAULT_SQL_LIMIT} unless NLQ specifies otherwise).
   4) Call the tool `execute_redshift_sql(sql_query, return_results=True)` to execute the SQL.
@@ -122,7 +122,7 @@ Allowed columns (use only these):
 
 --- WORKFLOW ---
 STEP A:  From the NLQ, generate a safe SQL query that uses only the allowed columns:
-    1. The table name is `healthcare_data`.
+    1. The table name is `{PRISCRIPTION_HISTORY_TABLR_NAME}`.
     2. You must only use these allowed columns:
     {", ".join(ALLOWED_COLUMNS)}
     3. Always produce a valid PostgreSQL SQL query.
@@ -165,10 +165,10 @@ STEP C: Output ONLY the final JSON object with top-level keys:
 
 
 --- Query Patterns ---
-- For general retrieval: SELECT * FROM healthcare_data LIMIT 50;
-- For filtering: SELECT * FROM healthcare_data WHERE <condition>;
+- For general retrieval: SELECT * FROM {PRISCRIPTION_HISTORY_TABLR_NAME} LIMIT 50;
+- For filtering: SELECT * FROM {PRISCRIPTION_HISTORY_TABLR_NAME} WHERE <condition>;
 - For sorting: ORDER BY <column> ASC/DESC;
-- For aggregations: SELECT <col>, COUNT(*) FROM healthcare_data GROUP BY <col>;
+- For aggregations: SELECT <col>, COUNT(*) FROM {PRISCRIPTION_HISTORY_TABLR_NAME} GROUP BY <col>;
 - Multi-condition: Use AND / OR explicitly.
 
 --- SAFETY & CONSTRAINTS ---
@@ -237,3 +237,4 @@ def run_prescribing_agent(payload: dict = {}):
 # ----------------------
 if __name__ == "__main__":
     app.run()
+    

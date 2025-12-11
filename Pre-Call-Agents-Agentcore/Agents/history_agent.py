@@ -2,7 +2,6 @@
 History Agent - LLM-driven SQL over Redshift Serverless
 
 - Accepts natural-language history queries
-- LLM generates SELECT SQL over history_mart
 - Uses Redshift Data API via execute_redshift_sql tool
 - Returns ONLY raw JSON from Redshift (no insights)
 """
@@ -54,7 +53,8 @@ HCP_SCHEMA_COLUMNS = get_parameter_value("SC_HCP_SCHEMA_COLUMNS")
 MCP_GATEWAY_URL = get_parameter_value("MCP_GATEWAY_URL")
 OAUTH_PROVIDER_NAME = get_parameter_value("PROVIDER_NAME")
 OAUTH_SCOPE = _parse_scopes(get_parameter_value("SCOPE"))
-
+SCHEMA_DISCRIPTION = get_parameter_value("SC_PRC_HCP_HISTORY_TABLE_SCHEMA")
+TABLE_NAME = get_parameter_value("SC_PRC_HCP_HISTORY_TABLE")
 
 # ---------------------------------------------------
 # 1) Identity & Access Bootstrap
@@ -103,43 +103,10 @@ def get_full_tools_list(client):
     return tools
 
 
-# ======================================================
-schema_description = """
-Table: history_mart
- 
-Columns:
-- hcp_id                       VARCHAR      -- e.g., 'HCP1000'
-- hcp_name                     VARCHAR      -- e.g., 'Dr. Smith'
-- territory_id                 VARCHAR      -- e.g., 'US-PA-E'
-- call_date                    DATE         -- e.g., '2025-09-30'
-- interaction_type             VARCHAR      -- Email | Phone Call | Physical | Webinar | Digital
-- topic_discussed              VARCHAR      -- 'Responder rates', 'Safety overview', 'MOA discussion', etc.
-- objection_raised             VARCHAR      -- 'None', 'Cost', 'Safety', 'Access', 'Efficacy'
-- materials_shared             VARCHAR      -- 'Payer sheet', 'KOL video', 'Safety FAQ', 'MOA email', 'None'
-- outcome                      VARCHAR      -- 'Requested follow-up deck', 'Declined', 'Rescheduled', 'Positive next step', 'Neutral'
-- followup_flag                VARCHAR      -- 'Yes' or 'No'
-- opened_moa_email_flag        VARCHAR      -- 'Yes' or 'No'
-- clicked_kol_video_flag       VARCHAR      -- 'Yes' or 'No'
-- clicked_campaign_link_flag   VARCHAR      -- 'Yes' or 'No'
-- formulary_update_30d_flag    VARCHAR      -- 'Yes' or 'No'
-- formulary_update_summary     VARCHAR      -- e.g., 'Tier updated; PA required.' or 'Tier updated; PA removed.'
-"""
-# ======================================================
-
-
-# ======================================================
-# 2) History Agent (LLM generates SQL → calls execute_redshift_sql)
-# ======================================================
-
-# def _tools_list():
-#     return [execute_redshift_sql]
-
-
 def create_history_agent() -> Agent:
     """
     LLM-based History Agent:
     - Interprets natural language history questions
-    - Generates a safe SELECT over history_mart
     - Calls execute_redshift_sql
     - Returns ONLY raw JSON (tool output)
     """
@@ -153,13 +120,13 @@ def create_history_agent() -> Agent:
         You are the **History Agent** in a multi-agent Sales Copilot system.
  
         Your job:
-        - Convert natural-language history questions into SQL over the `history_mart` table.
+        - Convert natural-language history questions into SQL
         - ALWAYS call the `execute_redshift_sql` tool with the SQL you generate.
  
         Rules:
-            1. The table name is `history_mart`.
+            1. The table name is {TABLE_NAME}.
             2. You must only use these allowed columns:
-            {", ".join(schema_description)}
+            {", ".join(SCHEMA_DISCRIPTION)}
             3. Always produce a valid Redshift SQL query.
             4. Never guess values not mentioned. If value is unclear, use placeholders:
                 {{value}}
@@ -181,10 +148,10 @@ def create_history_agent() -> Agent:
         - Include the data source table name also from where the data fetched
  
         Query Patterns:
-        - For general retrieval: SELECT * FROM history_mart LIMIT 50;
-        - For filtering: SELECT * FROM history_mart WHERE <condition>;
+        - For general retrieval: SELECT * FROM {TABLE_NAME} LIMIT 50;
+        - For filtering: SELECT * FROM {TABLE_NAME} WHERE <condition>;
         - For sorting: ORDER BY <column> ASC/DESC;
-        - For aggregations: SELECT <col>, COUNT(*) FROM history_mart GROUP BY <col>;
+        - For aggregations: SELECT <col>, COUNT(*) FROM {TABLE_NAME} GROUP BY <col>;
         - Multi-condition: Use AND / OR explicitly.
  
     """,
@@ -212,18 +179,7 @@ def ask_history_agent(payload: dict = {}) -> str:
     return result.text if hasattr(result, "text") else str(result)
 
 
-# Example local test
 if __name__ == "__main__":
     app.run()
+    
 
-    # ask_history_agent("show recent interactions for Dr. Smith")
-
-    # ask_history_agent("Show all safety objections in last 60 days")
-
-    # print(">>> Query: Show recent interactions for Dr. Smith")
-    # print(ask_history_agent("Show recent interactions for Dr. Smith"))
-    # print("\n----------------------------------\n")
-
-    # print(">>> Query: Show all safety objections in last 60 days")
-    # print(ask_history_agent("Show all safety objections in last 60 days"))
-    # print("\n----------------------------------\n")

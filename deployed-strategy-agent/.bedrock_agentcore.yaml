@@ -1,0 +1,54 @@
+default_agent: sc_prc_strategy_agent
+agents:
+  sc_prc_strategy_agent:
+    name: sc_prc_strategy_agent
+    entrypoint: C:/Users/nikhil.patil/Desktop/Sales-Copilet-Code/deployed-strategy-agent/strategy_agent.py
+    deployment_type: container
+    runtime_type: null
+    platform: linux/arm64
+    container_runtime: podman
+    source_path: C:\Users\nikhil.patil\Desktop\Sales-Copilet-Code\deployed-strategy-agent
+    aws:
+      execution_role: arn:aws:iam::969385807621:role/AgentCoreRuntimeRole
+      execution_role_auto_create: true
+      account: '969385807621'
+      region: us-east-1
+      ecr_repository: 969385807621.dkr.ecr.us-east-1.amazonaws.com/bedrock-agentcore-sc_prc_strategy_agent
+      ecr_auto_create: false
+      s3_path: null
+      s3_auto_create: false
+      network_configuration:
+        network_mode: PUBLIC
+        network_mode_config: null
+      protocol_configuration:
+        server_protocol: HTTP
+      observability:
+        enabled: true
+      lifecycle_configuration:
+        idle_runtime_session_timeout: null
+        max_lifetime: null
+    bedrock_agentcore:
+      agent_id: sc_prc_strategy_agent-fzs6N05eqb
+      agent_arn: arn:aws:bedrock-agentcore:us-east-1:969385807621:runtime/sc_prc_strategy_agent-fzs6N05eqb
+      agent_session_id: eafc84d9-1ca2-49a7-a43d-433947f62d4d
+    codebuild:
+      project_name: bedrock-agentcore-sc_prc_strategy_agent-builder
+      execution_role: arn:aws:iam::969385807621:role/AmazonBedrockAgentCoreSDKCodeBuild-us-east-1-f1d04f438d
+      source_bucket: bedrock-agentcore-codebuild-sources-969385807621-us-east-1
+    memory:
+      mode: STM_AND_LTM
+      memory_id: sc_prc_strategy_agent_mem-eGftVa9gtT
+      memory_arn: arn:aws:bedrock-agentcore:us-east-1:969385807621:memory/sc_prc_strategy_agent_mem-eGftVa9gtT
+      memory_name: sc_prc_strategy_agent_mem
+      event_expiry_days: 30
+      first_invoke_memory_check_done: true
+      was_created_by_toolkit: false
+    identity:
+      credential_providers: []
+      workload: null
+    authorizer_configuration: null
+    request_header_configuration: null
+    oauth_configuration: null
+    api_key_env_var_name: null
+    api_key_credential_provider_name: null
+    is_generated_by_agentcore_create: false

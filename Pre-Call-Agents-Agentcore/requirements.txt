@@ -5,4 +5,4 @@ bedrock-agentcore-starter-toolkit
 opensearch-py
 numpy
 pandas
- 
+PyPDF2

@@ -1,29 +1,36 @@
-# utilities/rag_indexer.py
 import time
-from typing import List, Dict
+import io
 import logging
+from typing import List, Dict
+
 import boto3
-from opensearchpy import OpenSearch, helpers
+from opensearchpy import helpers
 
-from utilities.rag_common import os_client, embed_text, SALES_COPILOT_INDEX_NAME, VECTOR_DIM
+from utilities.rag_common import (
+    os_client,
+    embed_text,
+    SALES_COPILOT_INDEX_NAME,
+    VECTOR_DIM
+)
 from utilities.get_aws_parameter_store import get_parameter_value
-CORPUS_PATH = get_parameter_value("CORPUS_PATH")
+
+import PyPDF2  # Make sure PyPDF2 is installed: pip install PyPDF2
+
+# Path will now represent a folder/prefix, NOT a file
+CORPUS_PREFIX = get_parameter_value("SALES_COPILOT_APPROVED_MATERIAL_CORPUS_PATH")
 
 
-def ensure_index(client: OpenSearch, index: str, dim: int):
+def ensure_index(client, index: str, dim: int):
     """
-    Creates the vector index if missing, with knn_vector mapping for AOSS.
+    Creates the vector index if it's missing.
     """
     if client.indices.exists(index=index):
-        logging.info(f"Index '{index}' already exists. Skipping creation.")
+        logging.info(f"Index '{index}' already exists.")
         return
 
     body = {
         "settings": {
-            "index": {
-                "knn": True,
-                "knn.algo_param.ef_search": 128
-            }
+            "index": {"knn": True}
         },
         "mappings": {
             "properties": {
@@ -35,87 +42,94 @@ def ensure_index(client: OpenSearch, index: str, dim: int):
                     "dimension": dim,
                     "method": {
                         "name": "hnsw",
-                        "engine": "nmslib",
-                        "space_type": "cosinesimil",
-                        "parameters": {
-                            "ef_construction": 256,
-                            "m": 32
-                        }
+                        "space_type": "cosinesimil"
                     }
                 }
             }
         }
     }
+
     client.indices.create(index=index, body=body)
-    logging.info(f"Created vector index '{index}' with knn_vector mapping.")
+    logging.info(f"Created vector index '{index}'.")
 
 
-def _read_text_from_s3(s3_uri: str) -> str:
+def list_pdfs_under_prefix(s3_prefix: str) -> List[str]:
     """
-    Read the entire text file from an S3 URI like:
-      s3://bucket/path/to/file.txt
+    Returns full S3 keys for PDFs under given folder.
+    Example prefix:
+        s3://bucket/folder/subfolder/
     """
-    if not s3_uri.startswith("s3://"):
-        raise ValueError(f"Not a valid s3 uri: {s3_uri}")
+    assert s3_prefix.startswith("s3://")
 
-    without_prefix = s3_uri[len("s3://"):]
-    bucket, key = without_prefix.split("/", 1)
+    without_prefix = s3_prefix.replace("s3://", "")
+    bucket, prefix = without_prefix.split("/", 1)
 
     s3 = boto3.client("s3")
+    pdf_keys = []
+
+    paginator = s3.get_paginator("list_objects_v2")
+    for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+        for item in page.get("Contents", []):
+            key = item["Key"]
+            if key.lower().endswith(".pdf"):
+                pdf_keys.append((bucket, key))
+
+    logging.info(f"Found {len(pdf_keys)} PDF(s) under prefix.")
+    return pdf_keys
+
+
+def extract_pdf_text(bucket: str, key: str) -> str:
+    """
+    Reads PDF from S3 and extracts raw text.
+    """
+    s3 = boto3.client("s3")
+
     obj = s3.get_object(Bucket=bucket, Key=key)
-    raw = obj["Body"].read()
-    return raw.decode("utf-8")
+    raw_bytes = obj["Body"].read()
+
+    reader = PyPDF2.PdfReader(io.BytesIO(raw_bytes))
+    pages_text = []
+    for page in reader.pages:
+        try:
+            pages_text.append(page.extract_text() or "")
+        except Exception:
+            pages_text.append("")
+
+    result = "\n".join(pages_text)
+    return result.strip()
 
 
-def _read_text_local(path: str) -> str:
+def build_docs_from_text(text: str, source_name: str) -> List[Dict]:
     """
-    Read a local text file.
+    Splits text into natural chunks separated by blank lines.
+    Each chunk becomes an embedding doc entry.
     """
-    with open(path, "r", encoding="utf-8") as f:
-        return f.read()
+    chunks = [x.strip() for x in text.split("\n\n") if x.strip()]
+    docs = []
+    for i, chunk in enumerate(chunks):
+        first_line = chunk.splitlines()[0] if chunk.splitlines() else source_name
+        title = first_line.strip()[:100]
 
-
-def read_corpus_docs(path: str) -> List[Dict]:
-    """
-    Reads corpus from S3 or local and splits it into sections separated by blank lines.
-    Returns list of {"doc_id":..., "title":..., "text":...}.
-    """
-    if path.startswith("s3://"):
-        logging.info(f"Reading corpus from S3: {path}")
-        full_text = _read_text_from_s3(path)
-    else:
-        logging.info(f"Reading corpus from local file: {path}")
-        full_text = _read_text_local(path)
-
-    sections = full_text.split("\n\n")
-    docs: List[Dict] = []
-    for i, sec in enumerate(sections):
-        sec = sec.strip()
-        if not sec:
-            continue
-
-        first_line = sec.splitlines()[0].strip()
-        title = first_line if first_line else sec[:60]
-
-        doc = {
-            "doc_id": f"approved_{i}",
+        docs.append({
+            "doc_id": f"{source_name.replace('.pdf','')}_{i}",
             "title": title,
-            "text": sec
-        }
-        docs.append(doc)
+            "text": chunk
+        })
 
     return docs
 
 
 def index_documents(docs: List[Dict]):
-    ensure_index(os_client, SALES_COPILOT_INDEX_NAME, VECTOR_DIM)#type:ignore
+    """
+    Bulk index documents into OpenSearch.
+    """
+    ensure_index(os_client, SALES_COPILOT_INDEX_NAME, VECTOR_DIM)
 
     actions = []
     for doc in docs:
         emb = embed_text(doc["text"])
         actions.append({
             "_index": SALES_COPILOT_INDEX_NAME,
-            # IMPORTANT: do NOT set _id, let AOSS generate it
             "_source": {
                 "doc_id": doc["doc_id"],
                 "title": doc["title"],
@@ -123,21 +137,43 @@ def index_documents(docs: List[Dict]):
                 "embedding": emb
             }
         })
-        # optional tiny sleep
-        time.sleep(0.01)
+        time.sleep(0.005)
 
     helpers.bulk(os_client, actions)
-    logging.info(f"Indexed {len(actions)} documents into '{SALES_COPILOT_INDEX_NAME}'.")
+    logging.info(f"Indexed {len(actions)} documents.")
 
 
 def main():
-    docs = read_corpus_docs(CORPUS_PATH)#type:ignore
-    logging.info("Docs to index:", len(docs))
-    if not docs:
-        logging.warning("No documents found in corpus. Please check CORPUS_PATH.")
+    """
+    Main entrypoint called manually or via Lambda/batch container.
+    """
+    if not CORPUS_PREFIX or not CORPUS_PREFIX.startswith("s3://"):
+        logging.error("CORPUS_PREFIX is invalid or missing")
         return
 
-    index_documents(docs)
+    pdf_refs = list_pdfs_under_prefix(CORPUS_PREFIX)
+    if not pdf_refs:
+        logging.error("No PDFs found to index!")
+        return
+
+    all_docs = []
+
+    for bucket, key in pdf_refs:
+        logging.info(f"Extracting text from: s3://{bucket}/{key}")
+        text = extract_pdf_text(bucket, key)
+
+        if not text.strip():
+            logging.warning(f"No extractable text in: {key}")
+            continue
+
+        docs = build_docs_from_text(text, source_name=key.split("/")[-1])
+        all_docs.extend(docs)
+
+    if not all_docs:
+        logging.error("No documents created after PDF parsing.")
+        return
+
+    index_documents(all_docs)
 
 
 if __name__ == "__main__":

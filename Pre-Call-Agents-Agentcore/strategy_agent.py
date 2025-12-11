@@ -1,21 +1,68 @@
-#/Strategy_Agent/strategy_agent.py
+"""
+Strategy Agent Module
+
+This module implements a strategy agent that intelligently classifies user intent
+and orchestrates calls to specialized sub-agents (Profile, History, Prescribing,
+Access, Competitive, Content, and Territory agents) based on the user's natural
+language query (NLQ).
+
+The agent follows a strict CLOSED WORLD model where only 7 agents are available
+and used only when required by the classified intent.
+"""
+
 import json
-from strands import Agent,tool
-from strands import Agent
-from Agents.profile_agent import agent as profile_agent
-from Agents.prescribe_agent import agent as priscribe_agent
-from Agents.history_agent import history_agent 
-from Agents.access_agent import agent as access_agent
-from Agents.competitive_agent import agent as competitive_agent
-from Agents.content_agent import agent as content_agent
-from Agents.territory_agent import agent as territory_agent
+import uuid
+import boto3
+from strands import Agent, tool
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
 
+# =====================================================================
+# AWS Configuration
+# =====================================================================
+AWS_REGION = "us-east-1"
+agentcore_client = boto3.client("bedrock-agentcore", region_name=AWS_REGION)
 app = BedrockAgentCoreApp()
 
-# ----------------------
-# Agent prompt (UPDATED WITH INTENT CLASSIFICATION)
-# ----------------------
+
+def get_parameter_value(parameter_name):
+    """
+    Fetch an individual parameter by name from AWS Systems Manager Parameter Store.
+    
+    This helper reads configuration from SSM Parameter Store to retrieve runtime
+    ARNs for various agents deployed in AWS Bedrock.
+
+    Args:
+        parameter_name (str): The name of the parameter to fetch from SSM.
+
+    Returns:
+        str or None: The parameter value (decrypted if needed) or None if an error occurs.
+
+    Example:
+        get_parameter_value("EDC_DATA_BUCKET") -> returns the S3 bucket name
+    """
+    try:
+        ssm_client = boto3.client("ssm", region_name=AWS_REGION)
+        response = ssm_client.get_parameter(Name=parameter_name, WithDecryption=True)
+        return response["Parameter"]["Value"]
+    except Exception as e:
+        return None
+
+
+# =====================================================================
+# Agent Runtime ARNs - Fetched from AWS Systems Manager Parameter Store
+# =====================================================================
+SC_PRC_HISTORY_AGENT_RUNTIME_ARN = get_parameter_value("SC_PRC_HISTORY_AGENT_ARN")
+SC_PRC_PRESCRIBE_AGENT_RUNTIME_ARN = get_parameter_value("SC_PRC_PRESCRIBE_AGENT_ARN")
+SC_PRC_PROFILE_AGENT_RUNTIME_ARN = get_parameter_value("SC_PRC_PROFILE_AGENT_ARN")
+SC_PRC_CONTENT_AGENT_RUNTIME_ARN = get_parameter_value("SC_PRC_CONTENT_AGENT_ARN")
+SC_PRC_COMPETITIVE_AGENT_RUNTIME_ARN = get_parameter_value("SC_PRC_COMPETITIVE_AGENT_ARN")
+SC_PRC_TERRITORY_AGENT_RUNTIME_ARN = get_parameter_value("SC_PRC_TERRITORY_AGENT_ARN")
+SC_PRC_ACCESS_AGENT_RUNTIME_ARN = get_parameter_value("SC_PRC_ACCESS_AGENT_ARN")
+
+
+# =====================================================================
+# Strategy Agent Prompt
+# =====================================================================
 STRATEGY_AGENT_PROMPT = """
 You are the Strategy Agent. You intelligently classify user intent and call ONLY the necessary agents.
 You NEVER call agents that are not required for the specific user question.
@@ -45,7 +92,7 @@ Rules:
 ============================================================
 STEP 1: INTENT CLASSIFICATION (DO THIS FIRST)
 ============================================================
-    Before calling any agent, CLASSIFY the user’s NLQ into ONE of these categories.
+    Before calling any agent, CLASSIFY the user's NLQ into ONE of these categories.
     Use keyword matching + semantic understanding.
     -------------------------------------------------------------------
     1. **pre_call_brief**  (FULL PRE-CALL PREP)
@@ -56,7 +103,7 @@ STEP 1: INTENT CLASSIFICATION (DO THIS FIRST)
     "prepare me for", "brief", "call brief", "get ready", 
     "meeting with", "visit prep", "pre-call", 
     "what should I discuss", "biggest priority", "call objective",
-    "what to talk about", "today’s call", "field intelligence"
+    "what to talk about", "today's call", "field intelligence"
     Call Agents:
     Profile → History → Prescribing → Access → Competitive → Content
     Example NLQs:
@@ -77,7 +124,7 @@ STEP 1: INTENT CLASSIFICATION (DO THIS FIRST)
     Examples:
     - "Give me the profile for HCP H123"
     - "Who is Dr. Mehta?"
-    - "What is Dr. Singh’s specialty?"
+    - "What is Dr. Singh's specialty?"
     -------------------------------------------------------------------
     3. **profile_with_history**  (PROFILE + INTERACTIONS)
     -------------------------------------------------------------------
@@ -91,7 +138,7 @@ STEP 1: INTENT CLASSIFICATION (DO THIS FIRST)
     Call Agents:
     Profile Agent + History Agent
     Examples:
-    - "Show me Dr. Sharma’s profile and past interactions"
+    - "Show me Dr. Sharma's profile and past interactions"
     - "What have we discussed with Dr. X before?"
     - "Which other doctors had similar topics with Dr. Y?"
     -------------------------------------------------------------------
@@ -116,30 +163,36 @@ STEP 1: INTENT CLASSIFICATION (DO THIS FIRST)
     Purpose:
     User wants payer/access/PA info.
     Keywords:
-    "access", "formulary", "coverage", "copay", 
-    "pa", "prior auth", "step therapy", "tier", "payer", 
-    "which plans cover", "affordability", "barriers"
+    "access", "formulary", "coverage", "copay", "PA and copay information", "coverage gaps", "non-covered plans",
+    "pa", "prior auth", "step therapy", "tier", "payer", "insurance plans", "prior authorization (PA)",
+    "which plans cover", "affordability", "barriers", "affordability risk"
     Call Agents:
     Access Agent ONLY
     Examples:
     - "Which plans cover our product for Dr. Rao?"
-    - "What’s the copay burden for this HCP?"
+    - "What's the copay burden for this HCP?"
+    - "Give me access insights for Dr. X"
     - "Does Dr. X have PA requirements?"
+    - "Identify any coverage gaps or non-covered plans for HCP1000 across all products"
+    - "Show plans with severe access friction or high alert severity for HCP1001"
     -------------------------------------------------------------------
     6. **competitive_intel**  (COMPETITOR ACTIVITY)
     -------------------------------------------------------------------
     Purpose:
     User wants competitor threats and share pressure.
     Keywords:
-    "competitor", "competitive", "threat", 
-    "share loss", "launch", "competitive pressure", 
-    "sample activity", "event activity", "loss driver"
+    "competitor", "competitive", "threat", "highest severity"
+    "share loss", "launch", "competitive pressure", "signals", "reasoning",
+    "sample activity", "event activity", "loss driver", "severity signals"
     Call Agents:
     Competitive Agent ONLY
     Examples:
     - "What are competitors doing around Dr. Sharma?"
     - "Is Dr. Patel facing competitive pressure?"
     - "Any competitor launches affecting this HCP?"
+    - "Explain the signal reasoning for row 10."
+    - "List HCPs with medium severity signals."
+    - "Show me the highest severity HCP signals.
     -------------------------------------------------------------------
     7. **content_materials**  (NEXT BEST CONTENT)
     -------------------------------------------------------------------
@@ -199,7 +252,7 @@ STEP 1: INTENT CLASSIFICATION (DO THIS FIRST)
     Examples:
     - "What is the main objective for my call with Dr. Y?"
     - "What action should I aim for with Dr. Patel?"
-    - "What is the key ask for today’s visit?"
+    - "What is the key ask for today's visit?"
     -------------------------------------------------------------------
     11. **relationship_mapping** (Doctors related to each other)
     -------------------------------------------------------------------Purpose:
@@ -230,7 +283,7 @@ STEP 1: INTENT CLASSIFICATION (DO THIS FIRST)
     13. **fallback_unsupported**
     -------------------------------------------------------------------
     Purpose:
-    NLQ doesn’t match anything above.
+    NLQ doesn't match anything above.
     Action:
     Return:
     {{ "error": "Unsupported pre-call request. Please rephrase." }}
@@ -355,7 +408,7 @@ Output Rules:
  
 ###4. KEY INSIGHTS 
    - Give insights in 2-3 lines.
-   - Provide insights ONLY from the table and the user’s request.  
+   - Provide insights ONLY from the table and the user's request.  
    - Do not invent or add anything beyond the table content.
 
 ### 5. CITATION
@@ -369,87 +422,372 @@ Output Rules:
 
 """
 
-@tool
-def profile_agent_tool(intent: str) -> list[dict]:
-    """
-    NL Agent tool to interpret natural language intents and retrieve competitive intelligence data.
-    """
-    print("intent received",intent)
-    return profile_agent(intent)
-@tool
-def prescribe_agent_tool(intent: str) -> list[dict]:
-    """
-    NL Agent tool to interpret natural language intents and retrieve competitive intelligence data.
-    """
-    print("intent received",intent)
-    return priscribe_agent(intent)
-@tool
-def history_agent_tool(intent: str) -> list[dict]:
-    """
-    NL Agent tool to interpret natural language intents and retrieve competitive intelligence data.
-    """
-    print("intent received",intent)
-    return history_agent(intent)
-@tool
-def access_agent_tool(intent: str) -> list[dict]:
-    """
-    NL Agent tool to interpret natural language intents and retrieve competitive intelligence data.
-    """
-    print("intent received",intent)
-    return access_agent(intent)
-@tool
-def competitive_agent_tool(intent: str) -> list[dict]:
-    """
-    NL Agent tool to interpret natural language intents and retrieve competitive intelligence data.
-    """
-    print("intent received",intent)
-    return competitive_agent(intent)
-@tool
-def content_agent_tool(intent: str) -> list[dict]:
-    """
-    NL Agent tool to interpret natural language intents and retrieve competitive intelligence data.
-    """
-    print("intent received",intent)
-    return content_agent(intent)
-@tool
-def territory_agent_tool(intent: str) -> list[dict]:
-    """
-    NL Agent tool to interpret natural language intents and retrieve competitive intelligence data.
-    """
-    print("intent received",intent)
-    return territory_agent(intent)
- 
-# ----------------------
-# Agent tools list
-# ----------------------
-# def _tools_list():
-#     return [profile_agent, prescribe_agent, history_agent, access_agent, competitive_agent, content_agent, territory_agent]
-def _tools_list():
-    return [profile_agent_tool, prescribe_agent_tool, history_agent_tool, territory_agent_tool, access_agent_tool, content_agent_tool, competitive_agent_tool]
 
-# ----------------------
-# CREATE AGENT
-# ----------------------
+# =====================================================================
+# Tool Definitions - Orchestrate Sub-agents
+# =====================================================================
+
+@tool
+def profile_agent_tool(intent: str) -> any:
+    """
+    Invoke the Profile Agent to retrieve HCP demographic and profile information.
+    
+    The Profile Agent returns information about healthcare provider demographics,
+    specialty, practice details, and network influence metrics.
+
+    Args:
+        intent (str): Natural language query to be processed by the Profile Agent.
+
+    Returns:
+        dict: Response from the Profile Agent containing profile data or error details.
+    """
+    # Generate unique session identifier for tracking and audit purposes
+    session_id = f"nl-{uuid.uuid4().hex}{uuid.uuid4().hex[:8]}"
+    payload = json.dumps({"prompt": intent, "session_id": session_id})
+    
+    # Prepare invocation parameters for Bedrock Agent Runtime
+    kwargs = {
+        "agentRuntimeArn": SC_PRC_PROFILE_AGENT_RUNTIME_ARN,
+        "runtimeSessionId": session_id,
+        "payload": payload,
+    }
+    body = None
+    
+    try:
+        # Invoke the Profile Agent via AWS Bedrock
+        resp = agentcore_client.invoke_agent_runtime(**kwargs)
+        body = resp["response"].read()
+        return json.loads(body.decode("utf-8") if isinstance(body, (bytes, bytearray)) else body)
+    except Exception as e:
+        # Handle errors gracefully and return error response
+        if body:
+            return {"result": body.decode("utf-8") if isinstance(body, (bytes, bytearray)) else str(body)}
+        else:
+            return {"error": f"profile_agent_tool failed: {str(e)}", "status": "error"}
+
+
+@tool
+def prescribe_agent_tool(intent: str) -> any:
+    """
+    Invoke the Prescribing Agent to retrieve prescribing trends and behavior data.
+    
+    The Prescribing Agent returns information about TRx/NRx trends, share shifts,
+    patient mix, therapy switches, and prescribing momentum.
+
+    Args:
+        intent (str): Natural language query to be processed by the Prescribing Agent.
+
+    Returns:
+        dict: Response from the Prescribing Agent containing prescribing analytics or error details.
+    """
+    # Generate unique session identifier for tracking and audit purposes
+    session_id = f"nl-{uuid.uuid4().hex}{uuid.uuid4().hex[:8]}"
+    payload = json.dumps({"prompt": intent, "session_id": session_id})
+    
+    # Prepare invocation parameters for Bedrock Agent Runtime
+    kwargs = {
+        "agentRuntimeArn": SC_PRC_PRESCRIBE_AGENT_RUNTIME_ARN,
+        "runtimeSessionId": session_id,
+        "payload": payload,
+    }
+    body = None
+    
+    try:
+        # Invoke the Prescribing Agent via AWS Bedrock
+        resp = agentcore_client.invoke_agent_runtime(**kwargs)
+        body = resp["response"].read()
+        return json.loads(body.decode("utf-8") if isinstance(body, (bytes, bytearray)) else body)
+    except Exception as e:
+        # Handle errors gracefully and return error response
+        if body:
+            return {"result": body.decode("utf-8") if isinstance(body, (bytes, bytearray)) else str(body)}
+        else:
+            return {"error": f"prescribe_agent_tool failed: {str(e)}", "status": "error"}
+
+
+@tool
+def history_agent_tool(intent: str) -> any:
+    """
+    Invoke the History Agent to retrieve interaction history and engagement data.
+    
+    The History Agent returns information about past interactions, call notes,
+    objections raised, samples shared, and content previously provided.
+
+    Args:
+        intent (str): Natural language query to be processed by the History Agent.
+
+    Returns:
+        dict: Response from the History Agent containing interaction history or error details.
+    """
+    # Generate unique session identifier for tracking and audit purposes
+    session_id = f"nl-{uuid.uuid4().hex}{uuid.uuid4().hex[:8]}"
+    payload = json.dumps({"prompt": intent, "session_id": session_id})
+    
+    # Prepare invocation parameters for Bedrock Agent Runtime
+    kwargs = {
+        "agentRuntimeArn": SC_PRC_HISTORY_AGENT_RUNTIME_ARN,
+        "runtimeSessionId": session_id,
+        "payload": payload,
+    }
+    body = None
+    
+    try:
+        # Invoke the History Agent via AWS Bedrock
+        resp = agentcore_client.invoke_agent_runtime(**kwargs)
+        body = resp["response"].read()
+        return json.loads(body.decode("utf-8") if isinstance(body, (bytes, bytearray)) else body)
+    except Exception as e:
+        # Handle errors gracefully and return error response
+        if body:
+            return {"result": body.decode("utf-8") if isinstance(body, (bytes, bytearray)) else str(body)}
+        else:
+            return {"error": f"history_agent_tool failed: {str(e)}", "status": "error"}
+
+
+@tool
+def access_agent_tool(intent: str) -> any:
+    """
+    Invoke the Access Agent to retrieve formulary and coverage information.
+    
+    The Access Agent returns information about formulary status, payer coverage,
+    prior authorization requirements, copay burden, and coverage gaps.
+
+    Args:
+        intent (str): Natural language query to be processed by the Access Agent.
+
+    Returns:
+        dict: Response from the Access Agent containing access/formulary data or error details.
+    """
+    # Generate unique session identifier for tracking and audit purposes
+    session_id = f"nl-{uuid.uuid4().hex}{uuid.uuid4().hex[:8]}"
+    payload = json.dumps({"prompt": intent, "session_id": session_id})
+    
+    # Prepare invocation parameters for Bedrock Agent Runtime
+    kwargs = {
+        "agentRuntimeArn": SC_PRC_ACCESS_AGENT_RUNTIME_ARN,
+        "runtimeSessionId": session_id,
+        "payload": payload,
+    }
+    body = None
+    
+    try:
+        # Invoke the Access Agent via AWS Bedrock
+        resp = agentcore_client.invoke_agent_runtime(**kwargs)
+        body = resp["response"].read()
+        return json.loads(body.decode("utf-8") if isinstance(body, (bytes, bytearray)) else body)
+    except Exception as e:
+        # Handle errors gracefully and return error response
+        if body:
+            return {"result": body.decode("utf-8") if isinstance(body, (bytes, bytearray)) else str(body)}
+        else:
+            return {"error": f"access_agent_tool failed: {str(e)}", "status": "error"}
+
+
+@tool
+def competitive_agent_tool(intent: str) -> any:
+    """
+    Invoke the Competitive Agent to retrieve competitive threat intelligence.
+    
+    The Competitive Agent returns information about competitor presence, market share
+    pressure, competitive loss drivers, and threat severity signals.
+
+    Args:
+        intent (str): Natural language query to be processed by the Competitive Agent.
+
+    Returns:
+        dict: Response from the Competitive Agent containing competitive intelligence or error details.
+    """
+    # Generate unique session identifier for tracking and audit purposes
+    session_id = f"nl-{uuid.uuid4().hex}{uuid.uuid4().hex[:8]}"
+    payload = json.dumps({"prompt": intent, "session_id": session_id})
+    
+    # Prepare invocation parameters for Bedrock Agent Runtime
+    kwargs = {
+        "agentRuntimeArn": SC_PRC_COMPETITIVE_AGENT_RUNTIME_ARN,
+        "runtimeSessionId": session_id,
+        "payload": payload,
+    }
+    body = None
+    
+    try:
+        # Invoke the Competitive Agent via AWS Bedrock
+        resp = agentcore_client.invoke_agent_runtime(**kwargs)
+        body = resp["response"].read()
+        return json.loads(body.decode("utf-8") if isinstance(body, (bytes, bytearray)) else body)
+    except Exception as e:
+        # Handle errors gracefully and return error response
+        if body:
+            return {"result": body.decode("utf-8") if isinstance(body, (bytes, bytearray)) else str(body)}
+        else:
+            return {"error": f"competitive_agent_tool failed: {str(e)}", "status": "error"}
+
+
+@tool
+def content_agent_tool(intent: str) -> any:
+    """
+    Invoke the Content Agent to retrieve recommended approved materials.
+    
+    The Content Agent returns information about approved content assets, messaging
+    blocks, and materials recommended for specific HCPs or scenarios.
+
+    Args:
+        intent (str): Natural language query to be processed by the Content Agent.
+
+    Returns:
+        dict: Response from the Content Agent containing content recommendations or error details.
+    """
+    # Generate unique session identifier for tracking and audit purposes
+    session_id = f"nl-{uuid.uuid4().hex}{uuid.uuid4().hex[:8]}"
+    payload = json.dumps({"prompt": intent, "session_id": session_id})
+    
+    # Prepare invocation parameters for Bedrock Agent Runtime
+    kwargs = {
+        "agentRuntimeArn": SC_PRC_CONTENT_AGENT_RUNTIME_ARN,
+        "runtimeSessionId": session_id,
+        "payload": payload,
+    }
+    body = None
+    
+    try:
+        # Invoke the Content Agent via AWS Bedrock
+        resp = agentcore_client.invoke_agent_runtime(**kwargs)
+        body = resp["response"].read()
+        return json.loads(body.decode("utf-8") if isinstance(body, (bytes, bytearray)) else body)
+    except Exception as e:
+        # Handle errors gracefully and return error response
+        if body:
+            return {"result": body.decode("utf-8") if isinstance(body, (bytes, bytearray)) else str(body)}
+        else:
+            return {"error": f"content_agent_tool failed: {str(e)}", "status": "error"}
+
+
+@tool
+def territory_agent_tool(intent: str) -> any:
+    """
+    Invoke the Territory Agent to identify territory and HCP prioritization.
+    
+    The Territory Agent returns prioritized territories and HCPs based on prescribing
+    momentum, competitive indicators, access quality, and business opportunity using
+    dynamic SQL queries against Redshift data warehouse.
+
+    Args:
+        intent (str): Natural language query to be processed by the Territory Agent.
+
+    Returns:
+        dict: Response from the Territory Agent containing territory/HCP prioritization or error details.
+    """
+    # Generate unique session identifier for tracking and audit purposes
+    session_id = f"nl-{uuid.uuid4().hex}{uuid.uuid4().hex[:8]}"
+    payload = json.dumps({"prompt": intent, "session_id": session_id})
+    
+    # Prepare invocation parameters for Bedrock Agent Runtime
+    kwargs = {
+        "agentRuntimeArn": SC_PRC_TERRITORY_AGENT_RUNTIME_ARN,
+        "runtimeSessionId": session_id,
+        "payload": payload,
+    }
+    body = None
+    
+    try:
+        # Invoke the Territory Agent via AWS Bedrock
+        resp = agentcore_client.invoke_agent_runtime(**kwargs)
+        body = resp["response"].read()
+        return json.loads(body.decode("utf-8") if isinstance(body, (bytes, bytearray)) else body)
+    except Exception as e:
+        # Handle errors gracefully and return error response
+        if body:
+            return {"result": body.decode("utf-8") if isinstance(body, (bytes, bytearray)) else str(body)}
+        else:
+            return {"error": f"territory_agent_tool failed: {str(e)}", "status": "error"}
+
+
+# =====================================================================
+# Agent Initialization
+# =====================================================================
+
+def _tools_list():
+    """
+    Return the list of available tool functions for the Strategy Agent.
+    
+    This function maintains a single source of truth for all available tools
+    that the Strategy Agent can invoke. The order reflects no priority but
+    aids in maintainability.
+
+    Returns:
+        list: List of tool functions (profile, prescribing, history, territory,
+              access, content, and competitive agent tools).
+    """
+    return [
+        profile_agent_tool,
+        prescribe_agent_tool,
+        history_agent_tool,
+        territory_agent_tool,
+        access_agent_tool,
+        content_agent_tool,
+        competitive_agent_tool,
+    ]
+
+
 def create_strategy_agent():
+    """
+    Create and instantiate the Strategy Agent with system prompt and tools.
+    
+    The Strategy Agent operates as an orchestrator that classifies user intents
+    and selectively invokes only the necessary sub-agents based on the CLOSED WORLD
+    model defined in the system prompt.
+
+    Returns:
+        Agent: Configured Strategy Agent ready to process user queries.
+    """
     return Agent(
         system_prompt=STRATEGY_AGENT_PROMPT,
         tools=_tools_list(),
     )
 
+
+# Instantiate the Strategy Agent globally for use in endpoints
 agent = create_strategy_agent()
-# ---------------------------------------------------
-# 4) Main Workflow
-# ------------------------------------------------
+
+
+# =====================================================================
+# Main Workflow Entrypoint
+# =====================================================================
+
 @app.entrypoint
 def run_main_agent(payload: dict = {}):
-    payload = payload.get("prompt", "Give me the details of HCP1001")
-    agent_result = agent(payload)
+    """
+    Main entrypoint for the Strategy Agent application.
+    
+    This function receives user queries (either via API or direct invocation),
+    extracts the natural language query prompt, and delegates to the Strategy Agent
+    for intent classification and sub-agent orchestration.
+
+    Args:
+        payload (dict, optional): Request payload containing the 'prompt' key
+                                 with the user's natural language query.
+                                 Defaults to an empty dictionary.
+
+    Returns:
+        Any: Response from the Strategy Agent containing classified intent results,
+             agent outputs, or error messages in JSON format.
+
+    Example:
+        payload = {"prompt": "Prepare me for my call with Dr. Rao"}
+        result = run_main_agent(payload)
+    """
+    # Extract the natural language prompt from the payload
+    prompt = payload.get("prompt", "Give me the details of HCP1001")
+    
+    # Invoke the Strategy Agent with the extracted prompt
+    agent_result = agent(prompt)
+    
     return agent_result
 
 
-# ---------------------------------------------------
-# 5) Run Locally
-# ---------------------------------------------------
-if __name__ == "__main__":
-    app.run()
+# =====================================================================
+# Local Development and Testing
+# =====================================================================
 
+if __name__ == "__main__":
+    # Start the application server when run locally
+    app.run()

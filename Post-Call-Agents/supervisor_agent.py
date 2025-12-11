@@ -1,16 +1,65 @@
-# /post_call/supervisor_agent.py
+"""
+Supervisor Agent for Post-Call Intelligence
+
+This module implements a supervisor/orchestrator agent that intelligently 
+classifies user intents and delegates tasks to specialized agents for 
+post-call analysis including transcription, structure, compliance, 
+actions, and sentiment analysis.
+"""
+
+import json
+import uuid
+import boto3
 from strands import Agent, tool
-from Agents.action_agent import agent as action_agent
-from Agents.sentiment_agent import agent as sentiment_agent
-from Agents.structure_agent import agent as structure_agent
-from Agents.transcription_agent import agent as transcription_agent
-from Agents.compilance_agent import agent as compilance_agent 
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
 
+
+# =============================================================================
+# AWS Configuration
+# =============================================================================
+AWS_REGION = "us-east-1"
+agentcore_client = boto3.client("bedrock-agentcore", region_name=AWS_REGION)
 app = BedrockAgentCoreApp()
-# ----------------------
-# Supervisor / Orchestrator
-# ----------------------
+
+
+def get_parameter_value(parameter_name: str) -> str:
+    """
+    Fetch a parameter value from AWS Systems Manager Parameter Store.
+    
+    Retrieves runtime ARNs and configuration values for agents deployed 
+    in AWS Bedrock from SSM Parameter Store with automatic decryption 
+    for secure parameters.
+
+    Args:
+        parameter_name (str): The name of the parameter to fetch from SSM.
+
+    Returns:
+        str: The decrypted parameter value, or None if retrieval fails.
+        
+    Raises:
+        Silently catches and returns None on any SSM API errors.
+    """
+    try:
+        ssm_client = boto3.client("ssm", region_name=AWS_REGION)
+        response = ssm_client.get_parameter(Name=parameter_name, WithDecryption=True)
+        return response["Parameter"]["Value"]
+    except Exception:
+        return None
+
+
+# =============================================================================
+# Agent Runtime ARNs - Fetched from AWS Systems Manager Parameter Store
+# =============================================================================
+SC_PRC_ACTION_AGENT_RUNTIME_ARN = get_parameter_value("SC_POC_ACTION_AGENT_ARN")
+SC_PRC_STRUCTURE_AGENT_RUNTIME_ARN = get_parameter_value("SC_POC_STRUCTURE_AGENT_ARN")
+SC_PRC_COMPILANCE_AGENT_RUNTIME_ARN = get_parameter_value("SC_POC_COMPILANCE_AGENT_ARN")
+SC_PRC_SENTIMENT_AGENT_RUNTIME_ARN = get_parameter_value("SC_POC_SENTIMENT_AGENT_ARN")
+SC_PRC_TRANSCRIPT_AGENT_RUNTIME_ARN = get_parameter_value("SC_POC_TRANSCRIPT_AGENT_ARN")
+
+
+# =============================================================================
+# Supervisor Agent System Prompt
+# =============================================================================
 SUPERVISOR_AGENT_PROMPT = f"""
 You are the Supervisor Agent for Post-Call Intelligence. You intelligently classify user intent and call ONLY the necessary agents.
 You NEVER call agents that are not required for the specific user question.
@@ -30,7 +79,7 @@ You must NOT create, assume, infer, rename, insert, extend, or invent ANY additi
 ============================================================
 STEP 1: INTENT CLASSIFICATION (DO THIS FIRST)
 ============================================================
-    Before calling any agent, CLASSIFY the user’s NLQ into ONE of these categories.
+    Before calling any agent, CLASSIFY the user's NLQ into ONE of these categories.
     Use keyword matching + semantic understanding.
     -------------------------------------------------------------------
     1. **full_post_call_prep** (FULL POST-CALL DELIVERABLES)
@@ -126,7 +175,7 @@ STEP 1: INTENT CLASSIFICATION (DO THIS FIRST)
     8. **fallback_unsupported**
     -------------------------------------------------------------------
     Purpose:
-    NLQ doesn’t match anything above.
+    NLQ doesn't match anything above.
     Action:
     Return:
     {{ "error": "Unsupported post-call request. Please rephrase." }}
@@ -207,7 +256,7 @@ Output Rules:
  
 ###4. KEY INSIGHTS 
    - Give insights in 2-3 lines.
-   - Provide insights ONLY from the table and the user’s request.  
+   - Provide insights ONLY from the table and the user's request.  
    - Do not invent or add anything beyond the table content.
 
 ### 5. CITATION
@@ -220,95 +269,269 @@ Output Rules:
 | HCP009 | T-215        | 132          | +2.1%                | 2                   | 92             | GOOD_ACCESS, HIGH_RX |
 ========================================================================
 
-ABSOLUTE NO-THINKING-OUT-LOUD RULE
-----------------------------------
-You must NEVER reveal internal reasoning, deliberation, assumptions,
-classification steps, or chain-of-thought. 
-You must NEVER describe what you are about to do or what you are thinking.
-
-You must ONLY produce:
-- The final agent calls required
-- The agent outputs returned
-- The final merged output in the required format
-- The NEW required citation section
-
-Forbidden:
-❌ “Let me think…”
-❌ “Now I have the transcript…”
-❌ “Based on the available information…”
-❌ “I will now call the Agent…”
-
 """
 
-# Agent tools list
-# ----------------------
 
-@tool#type:ignore
-def action_agent_tool(intent: str) -> list[dict]:
-    """
-    NL Agent tool to interpret natural language intents and retrieve competitive intelligence data.
-    """
-    print("intent received",intent)
-    return action_agent(intent)#type:ignore
+# =============================================================================
+# Agent Tool Definitions
+# =============================================================================
 
 @tool
-def sentiment_agent_tool(intent: str) -> list[dict]:
+def action_agent_tool(intent: str) -> dict:
     """
-    NL Agent tool to interpret natural language intents and retrieve competitive intelligence data.
+    Invoke the Action Agent via Bedrock Agent Runtime.
+    
+    Extracts action items, commitments, and next steps from call data.
+    Generates structured action item lists with priorities and timelines.
+
+    Args:
+        intent (str): Natural language prompt describing the action extraction request.
+
+    Returns:
+        dict: Agent response containing action items and metadata, or error details.
     """
-    print("intent received",intent)
-    return sentiment_agent(intent)#type:ignore
+    session_id = f"nl-{uuid.uuid4().hex}{uuid.uuid4().hex[:8]}"
+    payload = json.dumps({"prompt": intent, "session_id": session_id})
+    
+    kwargs = {
+        "agentRuntimeArn": SC_PRC_ACTION_AGENT_RUNTIME_ARN,
+        "runtimeSessionId": session_id,
+        "payload": payload,
+    }
+    body = None
+    
+    try:
+        resp = agentcore_client.invoke_agent_runtime(**kwargs)
+        body = resp["response"].read()
+        return json.loads(body.decode("utf-8") if isinstance(body, (bytes, bytearray)) else body)
+    except Exception:
+        if body:
+            return {"result": body.decode("utf-8") if isinstance(body, (bytes, bytearray)) else str(body)}
+        return {"error": "action_agent_tool invocation failed", "status": "error"}
+
+
 @tool
-def structure_agent_tool(intent: str) -> list[dict]:
+def sentiment_agent_tool(intent: str) -> dict:
     """
-    NL Agent tool to interpret natural language intents and retrieve competitive intelligence data.
+    Invoke the Sentiment Agent via Bedrock Agent Runtime.
+    
+    Analyzes call sentiment, tone, receptivity, relationship stage, and risk levels.
+    Provides quantified metrics for call quality and HCP engagement.
+
+    Args:
+        intent (str): Natural language prompt describing the sentiment analysis request.
+
+    Returns:
+        dict: Agent response containing sentiment metrics and insights, or error details.
     """
-    print("intent received",intent)
-    return structure_agent(intent)#type:ignore
+    session_id = f"nl-{uuid.uuid4().hex}{uuid.uuid4().hex[:8]}"
+    payload = json.dumps({"prompt": intent, "session_id": session_id})
+    
+    kwargs = {
+        "agentRuntimeArn": SC_PRC_SENTIMENT_AGENT_RUNTIME_ARN,
+        "runtimeSessionId": session_id,
+        "payload": payload,
+    }
+    body = None
+    
+    try:
+        resp = agentcore_client.invoke_agent_runtime(**kwargs)
+        body = resp["response"].read()
+        return json.loads(body.decode("utf-8") if isinstance(body, (bytes, bytearray)) else body)
+    except Exception:
+        if body:
+            return {"result": body.decode("utf-8") if isinstance(body, (bytes, bytearray)) else str(body)}
+        return {"error": "sentiment_agent_tool invocation failed", "status": "error"}
+
+
 @tool
-def transcription_agent_tool(intent: str) -> list[dict]:
+def structure_agent_tool(intent: str) -> dict:
     """
-    NL Agent tool to interpret natural language intents and retrieve competitive intelligence data.
+    Invoke the Structure Agent via Bedrock Agent Runtime.
+    
+    Generates structured call notes with categorized objections, key topics, 
+    content shared, samples discussed, and compliance flags.
+
+    Args:
+        intent (str): Natural language prompt describing the structure extraction request.
+
+    Returns:
+        dict: Agent response containing structured call data, or error details.
     """
-    print("intent received",intent)
-    return transcription_agent(intent)#type:ignore
+    session_id = f"nl-{uuid.uuid4().hex}{uuid.uuid4().hex[:8]}"
+    payload = json.dumps({"prompt": intent, "session_id": session_id})
+    
+    kwargs = {
+        "agentRuntimeArn": SC_PRC_STRUCTURE_AGENT_RUNTIME_ARN,
+        "runtimeSessionId": session_id,
+        "payload": payload,
+    }
+    body = None
+    
+    try:
+        resp = agentcore_client.invoke_agent_runtime(**kwargs)
+        body = resp["response"].read()
+        return json.loads(body.decode("utf-8") if isinstance(body, (bytes, bytearray)) else body)
+    except Exception:
+        if body:
+            return {"result": body.decode("utf-8") if isinstance(body, (bytes, bytearray)) else str(body)}
+        return {"error": "structure_agent_tool invocation failed", "status": "error"}
+
+
 @tool
-def compilance_agent_tool(intent: str) -> list[dict]:
+def transcription_agent_tool(intent: str) -> dict:
     """
-    NL Agent tool to interpret natural language intents and retrieve competitive intelligence data.
+    Invoke the Transcription Agent via Bedrock Agent Runtime.
+    
+    Retrieves and processes call transcriptions with metadata including 
+    call IDs, timestamps, and confidence scores.
+
+    Args:
+        intent (str): Natural language prompt describing the transcription request.
+
+    Returns:
+        dict: Agent response containing transcript data and metadata, or error details.
     """
-    print("intent received",intent)
-    return compilance_agent(intent)#type:ignore
+    session_id = f"nl-{uuid.uuid4().hex}{uuid.uuid4().hex[:8]}"
+    payload = json.dumps({"prompt": intent, "session_id": session_id})
+    
+    kwargs = {
+        "agentRuntimeArn": SC_PRC_TRANSCRIPT_AGENT_RUNTIME_ARN,
+        "runtimeSessionId": session_id,
+        "payload": payload,
+    }
+    body = None
+    
+    try:
+        resp = agentcore_client.invoke_agent_runtime(**kwargs)
+        body = resp["response"].read()
+        return json.loads(body.decode("utf-8") if isinstance(body, (bytes, bytearray)) else body)
+    except Exception:
+        if body:
+            return {"result": body.decode("utf-8") if isinstance(body, (bytes, bytearray)) else str(body)}
+        return {"error": "transcription_agent_tool invocation failed", "status": "error"}
 
 
-def _tools_list():
-    return [action_agent_tool, sentiment_agent_tool, structure_agent_tool , transcription_agent_tool, compilance_agent_tool]
+@tool
+def compilance_agent_tool(intent: str) -> dict:
+    """
+    Invoke the Compliance Agent via Bedrock Agent Runtime.
+    
+    Generates compliant follow-up emails and ensures communication adherence 
+    to regulatory guidelines. Can operate with or without transcript data.
 
-# ----------------------
-# CREATE AGENT
-# ----------------------
+    Args:
+        intent (str): Natural language prompt describing the compliance email request.
 
-def create_supervisor_agent():
+    Returns:
+        dict: Agent response containing email draft and metadata, or error details.
+    """
+    session_id = f"nl-{uuid.uuid4().hex}{uuid.uuid4().hex[:8]}"
+    payload = json.dumps({"prompt": intent, "session_id": session_id})
+    
+    kwargs = {
+        "agentRuntimeArn": SC_PRC_COMPILANCE_AGENT_RUNTIME_ARN,
+        "runtimeSessionId": session_id,
+        "payload": payload,
+    }
+    body = None
+    
+    try:
+        resp = agentcore_client.invoke_agent_runtime(**kwargs)
+        body = resp["response"].read()
+        return json.loads(body.decode("utf-8") if isinstance(body, (bytes, bytearray)) else body)
+    except Exception:
+        if body:
+            return {"result": body.decode("utf-8") if isinstance(body, (bytes, bytearray)) else str(body)}
+        return {"error": "compilance_agent_tool invocation failed", "status": "error"}
+
+
+# =============================================================================
+# Utility Functions
+# =============================================================================
+
+def _tools_list() -> list:
+    """
+    Compile the complete list of available agent tools.
+    
+    Returns:
+        list: Collection of all callable agent tool functions.
+    """
+    return [
+        action_agent_tool,
+        sentiment_agent_tool,
+        structure_agent_tool,
+        transcription_agent_tool,
+        compilance_agent_tool
+    ]
+
+
+# =============================================================================
+# Agent Initialization
+# =============================================================================
+
+def create_supervisor_agent() -> Agent:
+    """
+    Create and configure the supervisor agent.
+    
+    Initializes the supervisor agent with the system prompt and list of 
+    available tools for intelligent delegation to specialized agents.
+
+    Returns:
+        Agent: Configured supervisor agent instance ready for inference.
+    """
     return Agent(
         system_prompt=SUPERVISOR_AGENT_PROMPT,
         tools=_tools_list(),
     )
 
+
+# Instantiate the supervisor agent
 agent = create_supervisor_agent()
 
-# ----------------------
-# Runner
-# ----------------------
+
+# =============================================================================
+# Application Entrypoint
+# =============================================================================
+
 @app.entrypoint
-def run_supervisor_agent(payload: dict = {}):
-    payload = payload.get("prompt", "Give me the details of HCP1001 from my last call")
-    agent_result = agent(payload)#type:ignore
+def run_supervisor_agent(payload: dict = None) -> dict:
+    """
+    Execute the supervisor agent with the provided prompt.
+    
+    Processes user natural language queries and orchestrates appropriate 
+    agent calls based on intent classification. This is the main entry point 
+    for the application.
+
+    Args:
+        payload (dict, optional): Input payload containing the user prompt.
+                                 Defaults to a sample query if not provided.
+
+    Returns:
+        dict: The supervisor agent's response including agent outputs and 
+              formatted results.
+    """
+    if payload is None:
+        payload = {}
+    
+    # Extract prompt from payload with a sensible default
+    user_prompt = payload.get("prompt", "Give me the details of HCP1001 from my last call")
+    
+    # Invoke the agent with user prompt
+    agent_result = agent(user_prompt)
+    
     return agent_result
 
 
-# ---------------------------------------------------
-# 5) Run Locally
-# ---------------------------------------------------
+# =============================================================================
+# Main Entry Point
+# =============================================================================
+
 if __name__ == "__main__":
+    """
+    Application startup routine.
+    
+    Initializes and runs the Bedrock Agent Core application server,
+    making the supervisor agent available for request processing.
+    """
     app.run()
-    # run_main_agent()

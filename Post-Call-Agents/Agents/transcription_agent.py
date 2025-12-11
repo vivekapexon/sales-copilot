@@ -12,11 +12,30 @@ from bedrock_agentcore.runtime import BedrockAgentCoreApp
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("transciption_agent")
 
+
+def get_parameter_value(parameter_name):
+    """Fetch an individual parameter by name from AWS Systems Manager Parameter Store.
+
+    Returns:
+        str or None: The parameter value (decrypted if needed) or None on error.
+
+    Notes:
+      - This helper reads configuration from SSM Parameter Store. Example usage in this module:
+          get_parameter_value("EDC_DATA_BUCKET") -> returns the S3 bucket name used for EDC files.
+    """
+    try:
+        ssm_client = boto3.client("ssm")
+        response = ssm_client.get_parameter(Name=parameter_name, WithDecryption=True)
+        return response["Parameter"]["Value"]
+    except Exception as e:
+        print(f"Error fetching parameter {parameter_name}: {str(e)}")
+        return None
+    
 # Config values (change anytime)
-AUDIO_BUCKET = "sales-copilot-bucket"
-AUDIO_PREFIX = "hcpaudiocalls/"  # <-- your audio folder prefix
-TEMP_UPLOAD_BUCKET = "sales-copilot-bucket"
-TRANSCRIBE_OUTPUT_BUCKET = "sales-copilot-bucket"
+AUDIO_BUCKET = get_parameter_value("SC_POC_SA_TA_BUCKET")
+AUDIO_PREFIX = get_parameter_value("SC_POC_TA_AUDIO_PREFIX")  # <-- your audio folder prefix
+TEMP_UPLOAD_BUCKET = get_parameter_value("SC_POC_SA_TA_BUCKET")
+TRANSCRIBE_OUTPUT_BUCKET = get_parameter_value("SC_POC_SA_TA_BUCKET")
 
 app = BedrockAgentCoreApp()
 
@@ -38,7 +57,6 @@ def transcribe_audio(
     """
     Main transcription tool. Auto-builds S3 URI using only the HCP_ID and AUDIO_PREFIX.
     """
-    print(f"[INFO] Starting transcription | bucket={AUDIO_BUCKET}")
 
     if not (hcp_id or s3_audio_uri or local_audio_path):
         raise ValueError("Provide either hcp_id, s3_audio_uri, or local_audio_path")
@@ -49,7 +67,6 @@ def transcribe_audio(
     # Build S3 URI automatically if hcp_id is provided
     if hcp_id and not s3_audio_uri:
         s3_audio_uri = f"s3://{AUDIO_BUCKET}/{AUDIO_PREFIX}{hcp_id}.{media_format}"
-        print(f"[AUTO] Resolved s3_audio_uri = {s3_audio_uri}")
 
     temp_key = None
     if local_audio_path:
@@ -57,7 +74,6 @@ def transcribe_audio(
             raise FileNotFoundError(local_audio_path)
         filename = os.path.basename(local_audio_path)
         temp_key = f"tmp/transcribe/{uuid.uuid4().hex}/{filename}"
-        print(f"[UPLOAD] Uploading local file to s3://{TEMP_UPLOAD_BUCKET}/{temp_key}")
         s3_client.upload_file(local_audio_path, TEMP_UPLOAD_BUCKET, temp_key)
         s3_audio_uri = f"s3://{TEMP_UPLOAD_BUCKET}/{temp_key}"
 

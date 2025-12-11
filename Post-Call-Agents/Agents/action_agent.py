@@ -1,4 +1,3 @@
-# /post_call/Agents/action_agent.py
 import os
 from strands import Agent
 import boto3
@@ -35,9 +34,12 @@ def _parse_scopes(s: str) -> list[str]:
         return []
     parts = re.split(r"[,\s]+", s.strip())
     return [p for p in parts if p]
+
 MCP_GATEWAY_URL = get_parameter_value("MCP_GATEWAY_URL")
 OAUTH_PROVIDER_NAME = get_parameter_value("PROVIDER_NAME")
 OAUTH_SCOPE = _parse_scopes(get_parameter_value("SCOPE"))
+TABLE_NAME = get_parameter_value("SC_POC_ACTION_TABLE")
+ACTION_SCHEMA_COLUMNS = get_parameter_value("SC_POC_ACTION_TABLE_SCHEMA")
 
 # ---------------------------------------------------
 # 1) Identity & Access Bootstrap
@@ -82,106 +84,6 @@ def get_full_tools_list(client):
         pagination_token = result.pagination_token
     return tools
 
-# ---------------------------------------------------
-# 0) JSON
-# ---------------------------------------------------
-ACTION_SCHEMA_COLUMNS = {
-  "table_name": "public.call_action_items",
-  "description": "Stores extracted post-call action items for each HCP and Call interaction. Used by the Action Agent to generate tasks, sample requests, hub referrals, calendar blocks, and CRM payloads.",
-
-  "columns": {
-    "hcp_id": {
-      "type": "varchar(50)",
-      "description": "Unique identifier for the HCP associated with the call."
-    },
-    "call_id": {
-      "type": "varchar(100)",
-      "description": "Unique call identifier. Primary lookup key for the Action Agent."
-    },
-    "action_items_json": {
-      "type": "varchar(65535)",
-      "description": "JSON array of action items extracted from the post-call conversation. Each item contains action_type, owner, due_date."
-    },
-    "primary_action_type": {
-      "type": "varchar(100)",
-      "description": "Primary or dominant action type for the call."
-    },
-    "task_due_date": {
-      "type": "date",
-      "description": "Default due date for the primary task."
-    },
-    "task_owner_role": {
-      "type": "varchar(100)",
-      "description": "Role responsible for executing the primary task, e.g., Rep, Access Specialist, MedInfo."
-    },
-    "sample_request_qty": {
-      "type": "integer",
-      "description": "Number of samples requested by HCP. 0 if none."
-    },
-    "hub_referral_flag": {
-      "type": "varchar(10)",
-      "description": "Indicates if a HUB referral is required. Values: 'Yes' or 'No'."
-    },
-    "calendar_block_minutes": {
-      "type": "integer",
-      "description": "Amount of time (in minutes) to block in the rep's calendar."
-    },
-    "priority_score": {
-      "type": "integer",
-      "description": "Score representing priority level of the call and tasks. Higher means higher priority."
-    }
-  },
-
-  "primary_keys": ["call_id", "hcp_id"],
-
-  "query_patterns": {
-    "lookup_by_call_id": {
-      "description": "Fetch single call action entry using call_id.",
-      "sql": "SELECT * FROM public.call_action_items WHERE call_id = '<CALL_ID>' ORDER BY priority_score DESC LIMIT 1;"
-    },
-    "lookup_by_hcp_id": {
-      "description": "Fetch latest action entry for a given HCP.",
-      "sql": "SELECT * FROM public.call_action_items WHERE hcp_id = '<HCP_ID>' ORDER BY priority_score DESC LIMIT 1;"
-    },
-    "lookup_next_high_priority": {
-      "description": "Fetch next highest priority pending action if no call_id provided.",
-      "sql": "SELECT * FROM public.call_action_items ORDER BY priority_score DESC LIMIT 1;"
-    },
-    "fetch_all_actions_for_call": {
-      "description": "Fetch all actions tied to a specific call.",
-      "sql": "SELECT * FROM public.call_action_items WHERE call_id = '<CALL_ID>' ORDER BY priority_score DESC;"
-    }
-  },
-
-  "action_item_json_format": {
-    "description": "Expected structure inside action_items_json column.",
-    "example": [
-      {
-        "action_type": "submit_PA_support",
-        "due_date": "2025-10-22",
-        "owner": "Access Specialist"
-      },
-      {
-        "action_type": "log_samples",
-        "due_date": "2025-10-23",
-        "owner": "Rep"
-      },
-      {
-        "action_type": "initiate_MI_response",
-        "due_date": "2025-10-24",
-        "owner": "MedInfo"
-      }
-    ]
-  },
-
-  "business_rules": {
-    "sample_request_rule": "sample_request_qty > 0 indicates a sample task must be created.",
-    "hub_referral_rule": "hub_referral_flag == 'Yes' indicates a HUB referral task.",
-    "calendar_block_rule": "calendar_block_minutes > 0 requires a calendar event to be created.",
-    "priority_rule": "priority_score is used to determine urgency and ordering of tasks.",
-    "owner_assignment_rule": "task_owner_role overrides individual action owner if missing."
-  }
-}
 
 
 # ---------------------------------------------------
@@ -222,7 +124,7 @@ def create_agent():
 
             Your first step:
             ---------------------------------------------
-            1. The table name is `call_action_items`.
+            1. The table name is {TABLE_NAME}.
             2. You must only use these allowed columns:
             {", ".join(ACTION_SCHEMA_COLUMNS)}
             3. Always produce a valid PostgreSQL SQL query.

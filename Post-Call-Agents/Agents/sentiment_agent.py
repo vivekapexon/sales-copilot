@@ -6,8 +6,6 @@ import logging
 from strands import Agent,tool
 
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-logger = logging.getLogger("sentiment_agent")
 app = BedrockAgentCoreApp()
 
 # Tokens considered placeholders / not useful
@@ -207,7 +205,6 @@ def run_main_agent(payload: dict = {}):
             HCP: No specific concerns today just curious about the updates.
             Rep: I'll share the new coverage sheet and schedule a quick follow-up demo.
             HCP: Great email the checklists and we'll trial with a patient this week."""
-
 
     payload = payload.get("prompt",query_transcript)
     agent_result = agent(payload)#type:ignore

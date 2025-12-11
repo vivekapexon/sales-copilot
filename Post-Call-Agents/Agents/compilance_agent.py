@@ -34,9 +34,12 @@ def _parse_scopes(s: str) -> list[str]:
         return []
     parts = re.split(r"[,\s]+", s.strip())
     return [p for p in parts if p]
+
 MCP_GATEWAY_URL = get_parameter_value("MCP_GATEWAY_URL")
 OAUTH_PROVIDER_NAME = get_parameter_value("PROVIDER_NAME")
 OAUTH_SCOPE = _parse_scopes(get_parameter_value("SCOPE"))
+TABLE_NAME = get_parameter_value("SC_POC_FOLLOWP_EVENTS_TABLE")
+COMPLIANCE_SCHEMA = get_parameter_value("SC_POC_FOLLOWP_EVENTS_TABLE_SCHEMA")
 
 # ---------------------------------------------------
 # 1) Identity & Access Bootstrap
@@ -81,35 +84,7 @@ def get_full_tools_list(client):
         pagination_token = result.pagination_token
     return tools
 
-# ---------------------------------------------------
-# Compliance table schema (informational)
-# ---------------------------------------------------
-COMPLIANCE_SCHEMA = [
-    {"name": "hcp_id", "type": "STRING", "description": "Healthcare provider identifier"},
-    {"name": "call_id", "type": "STRING", "description": "Call identifier"},
-    {"name": "followup_template_id", "type": "STRING", "description": "Template used for follow-up"},
-    {"name": "followup_email_subject", "type": "STRING", "description": "Email subject"},
-    {"name": "followup_email_body", "type": "STRING", "description": "Email body (may be multiline)"},
-    {"name": "mi_request_flag", "type": "BOOLEAN", "description": "Medical information request flag"},
-    {"name": "mi_response_template_id", "type": "STRING", "description": "Template for MI responses"},
-    {"name": "compliance_approval_status", "type": "STRING", "description": "PENDING / FLAGGED / APPROVED / BLOCKED"},
-    {"name": "compliance_rule_ids", "type": "ARRAY/STRING", "description": "e.g. ['RULE_003_SUBSTANTIATED_CLAIMS']"},
-    {"name": "compliance_evidence", "type": "JSON/STRING", "description": "Review metadata, reference docs, notes"},
-    {"name": "redaction_required", "type": "BOOLEAN", "description": "Whether redaction is required"},
-    {"name": "redaction_segments", "type": "JSON/STRING", "description": "Segments identified for redaction"},
-    {"name": "automated_send_allowed", "type": "BOOLEAN", "description": "Whether automated send is permitted"},
-    {"name": "human_review_required", "type": "BOOLEAN", "description": "Whether human review is required"},
-    {"name": "escalation_team", "type": "STRING", "description": "COMPLIANCE_REVIEW / LEGAL_REVIEW / MEDICAL_REVIEW"},
-    {"name": "escalated_at", "type": "TIMESTAMP", "description": "When escalation occurred"},
-    {"name": "resolved_by", "type": "STRING", "description": "User id who resolved the item"},
-    {"name": "resolution_notes", "type": "STRING", "description": "Notes about resolution"},
-    {"name": "provenance_key", "type": "STRING", "description": "Unique event key / provenance"},
-    {"name": "created_by", "type": "STRING", "description": "Creator user id"},
-    {"name": "followup_sent_datetime", "type": "TIMESTAMP or NULL", "description": "When follow-up was sent"},
-    {"name": "send_status", "type": "STRING", "description": "SCHEDULED / SENT / FAILED / CANCELLED / UNDER_REVIEW"},
-    {"name": "sla_met_flag", "type": "BOOLEAN", "description": "SLA met flag"},
-    {"name": "region", "type": "STRING", "description": "Region (e.g. SOUTHEAST, NORTHEAST, EU, APAC)"}
-]
+
 # ---------------------------------------------------
 # 2) Agent Definition
 # ---------------------------------------------------
@@ -137,7 +112,7 @@ def create_agent():
         --------------------------------
 
         You work with:
-        1) A Redshift table named `followup_events` with columns {COMPLIANCE_SCHEMA} :
+        1) A Redshift table named {TABLE_NAME} with columns {COMPLIANCE_SCHEMA} :
 
         2) Optional STRUCTURED NOTE from the Structure Agent provided in the user instruction
         as JSON text. Example structure:
@@ -164,7 +139,7 @@ def create_agent():
         2. HOW TO FETCH DATA
         --------------------------------
         1. Rules:
-            1. The table name is `followup_events`.
+            1. The table name is {TABLE_NAME}.
             2. You must only use these allowed columns is {COMPLIANCE_SCHEMA}:
             3. Always produce a valid PostgreSQL SQL query.
             4. Never guess values not mentioned. If value is unclear, use placeholders:
@@ -185,10 +160,10 @@ def create_agent():
             - No other columns except those requested,No SQL, no logs.
 
         3. Query Patterns:
-            - For general retrieval: SELECT * FROM followup_events LIMIT 50;
-            - For filtering: SELECT * FROM followup_events WHERE <condition>;
+            - For general retrieval: SELECT * FROM {TABLE_NAME} LIMIT 50;
+            - For filtering: SELECT * FROM {TABLE_NAME} WHERE <condition>;
             - For sorting: ORDER BY <column> ASC/DESC;
-            - For aggregations: SELECT <col>, COUNT(*) FROM followup_events GROUP BY <col>;
+            - For aggregations: SELECT <col>, COUNT(*) FROM {TABLE_NAME} GROUP BY <col>;
             - Multi-condition: Use AND / OR explicitly.
             
             You must always generate the most reasonable SQL based on the user's text.
@@ -197,7 +172,7 @@ def create_agent():
         1. COMPLIANCE EVALUATION LOGIC
         --------------------------------
 
-        Once you have the row from `followup_events`, you must analyze:
+        Once you have the row from {TABLE_NAME}, you must analyze:
         Key checks (conceptual, performed via your reasoning over the text):
 
         1) TEMPLATE & MI CHECKS

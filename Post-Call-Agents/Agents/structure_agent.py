@@ -1,4 +1,3 @@
-#structure agent.py
 import json
 from strands import Agent,tool
 import boto3
@@ -34,18 +33,18 @@ def get_parameter_value(parameter_name):
 # ----------------------
 # Configuration 
 # ----------------------
-WORKGROUP = "sales-copilot-workgroup"
-DATABASE = "sales_copilot_db"
-SECRET_ARN = (
-    "arn:aws:secretsmanager:us-east-1:969385807621:"
-    "secret:redshift!sales-copilot-namespace-sales_copilot_admin-seNjuJ"
-)
+WORKGROUP = get_parameter_value("REDSHIFT_WORKGROUP")
+DATABASE = get_parameter_value("SC_REDSHIFT_DATABASE")
+SECRET_ARN = get_parameter_value("SC_REDSHIFT_SECRET_ARN")
+TRANSCRIPT_TABLE = get_parameter_value("SC_POC_VOICE_CRM_TABLE") 
+TRANSCRIPTION_BUCKET = get_parameter_value("SC_POC_SA_TA_BUCKET")
+RESULT_BUCKET = get_parameter_value("SC_POC_SA_TA_BUCKET")
+CSV_BUCKET=get_parameter_value("SC_POC_SA_TA_BUCKET")
 
 # Optional: set a default row limit for arbitrary SQL to avoid accidental full-table scans
 DEFAULT_SQL_LIMIT = 1000
 SQL_POLL_INTERVAL_SECONDS = 0.5
 SQL_POLL_MAX_SECONDS = 30.0
-
 # ----------------------
 # Helper: Redshift Data API tool
 # ----------------------
@@ -127,11 +126,7 @@ def execute_redshift_sql(sql_query: str, return_results: bool = True) -> Dict[st
 
     return {"status": "finished", "rows": records, "statement_id": stmt_id}
 
-# Set this to your transcripts table in Redshift
-TRANSCRIPT_TABLE = "public.voice_to_crm" 
-TRANSCRIPTION_BUCKET = "sales-copilot-bucket"
-RESULT_BUCKET = "sales-copilot-bucket"
-CSV_BUCKET="sales-copilot-bucket"
+
 
 @tool
 def save_structured_note(key: str, note: Dict[str, Any]) -> str:
@@ -297,7 +292,7 @@ agent=create_call_structure_agent()
 @app.entrypoint
 def run_main_agent(payload: dict = {}):
     # Example instruction: in real usage you can embed call_id / structured note JSON here.
-    payload = payload.get("prompt","Provide structure called summary of my last call")
+    payload = payload.get("prompt","Provide structure called summary of my last call with HCP1001")
     agent_result = agent(payload)#type:ignore
     return agent_result
 
@@ -305,5 +300,5 @@ def run_main_agent(payload: dict = {}):
 # Run Locally
 # ---------------------------------------------------
 if __name__ == "__main__":
-    app.run()
-    #run_main_agent()
+    #app.run()
+    run_main_agent()

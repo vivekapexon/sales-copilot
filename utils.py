@@ -25,7 +25,7 @@ def get_parameter_value(parameter_name):
           get_parameter_value("EDC_DATA_BUCKET") -> returns the S3 bucket name used for EDC files.
     """
     try:
-        ssm_client = boto3.client("ssm")
+        ssm_client = boto3.client("ssm",region_name="us-east-1")
         response = ssm_client.get_parameter(Name=parameter_name, WithDecryption=True)
         return response["Parameter"]["Value"]
     except Exception as e:

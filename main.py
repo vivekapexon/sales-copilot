@@ -3,7 +3,6 @@ from fastapi import FastAPI, HTTPException, Query
 from typing import Any, Dict, Optional
 from utils import execute_redshift_sql
 from KPI.queries import kpi_overview_sql
-import time
 import logging
 
 logging.basicConfig(level=logging.INFO)
@@ -18,8 +17,7 @@ def safe_number(v: Any) -> Optional[float]:
             return None
         if isinstance(v, (int, float)):
             return float(v)
-        s = str(v).strip()
-        s = s.replace(",", "")
+        s = str(v).strip().replace(",", "")
         if s == "":
             return None
         if s.lower() in ("true", "false"):
@@ -30,21 +28,19 @@ def safe_number(v: Any) -> Optional[float]:
 
 
 def build_response_from_row(row: Dict[str, Any]) -> Dict[str, Any]:
-    # Pre-call
+    # ---- PRE-CALL KPIs ----
     total_hcps = safe_number(row.get("total_hcps_global"))
-    total_territories = safe_number(row.get("total_territories_global"))
-    total_hcps_assigned = int(safe_number(row.get("total_hcps_assigned") or 0))
     total_interacted_hcps = int(safe_number(row.get("total_interacted_hcps_by_user") or 0))
     followup_emails_sent = int(safe_number(row.get("followup_emails_sent_by_user") or 0))
     scheduled_calls_next_7d = int(safe_number(row.get("scheduled_calls_next_7d") or 0))
 
-    # Post-call
+    # ---- POST-CALL KPIs ----
     action_items_pending = int(safe_number(row.get("action_items_pending") or 0))
     sample_request_qty_30d = int(safe_number(row.get("sample_request_qty_30d") or 0))
     followups_sent_last_30d = int(safe_number(row.get("followups_sent_last_30d") or 0))
-    transcripts_count_today = int(safe_number(row.get("transcripts_count_today") or 0))
+    total_hcp_contacted_today = int(safe_number(row.get("total_hcp_contacted_today") or 0))
 
-    response = {
+    return {
         "pre-call-kpis": {
             "total_hcps": total_hcps,
             "total_interacted_hcps": total_interacted_hcps,
@@ -55,10 +51,9 @@ def build_response_from_row(row: Dict[str, Any]) -> Dict[str, Any]:
             "action_items_pending": action_items_pending,
             "sample_request_qty_30d": sample_request_qty_30d,
             "followups_sent_last_30d": followups_sent_last_30d,
-            "transcripts_count_today": transcripts_count_today
+            "total_hcp_contacted_today": total_hcp_contacted_today
         }
     }
-    return response
 
 
 @app.get("/health")
@@ -71,33 +66,22 @@ def kpi_overview(user_id: str = Query(..., description="User id (e.g. 101) used 
     if not user_id:
         raise HTTPException(status_code=400, detail="user_id is required")
 
-    api_start = time.time()
     sql = kpi_overview_sql(user_id)
-
-    sql_start = time.time()
     resp = execute_redshift_sql(sql)
-    sql_end = time.time()
-
-    sql_elapsed = round(sql_end - sql_start, 3)
-    api_elapsed = round(time.time() - api_start, 3)
 
     if resp.get("status") != "finished":
         detail = {
             "status": resp.get("status"),
             "message": resp.get("message"),
-            "statement_id": resp.get("statement_id"),
-            "__meta__": {"sql_seconds": sql_elapsed, "api_seconds": api_elapsed}
+            "statement_id": resp.get("statement_id")
         }
         logger.error("KPI query failed: %s", detail)
         raise HTTPException(status_code=500, detail=detail)
 
     rows = resp.get("rows", [])
     if not rows:
-        return {"message": "no data", "dashboard": {}, "__meta__": {"sql_seconds": sql_elapsed, "api_seconds": api_elapsed}}
+        return {"message": "no data", "dashboard": {}}
 
-    row = rows[0]
-    dashboard = build_response_from_row(row)
-    dashboard["__meta__"] = {"sql_seconds": sql_elapsed, "api_seconds": api_elapsed, "statement_id": resp.get("statement_id")}
-
-    logger.info("KPI served for user=%s sql_seconds=%s api_seconds=%s statement_id=%s", user_id, sql_elapsed, api_elapsed, resp.get("statement_id"))
+    dashboard = build_response_from_row(rows[0])
+    logger.info("KPI served successfully for user=%s", user_id)
     return dashboard

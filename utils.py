@@ -5,7 +5,7 @@
 import boto3
 from typing import Dict, Any
 import time
-s3 = boto3.client("s3")
+s3 = boto3.client("s3",region_name="us-east-1")
 bedrock = boto3.client("bedrock-runtime", region_name= "us-east-1")
 import logging
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
@@ -59,7 +59,7 @@ def execute_redshift_sql(sql_query: str, return_results: bool = True) -> Dict[st
     - sql_query: SQL string to execute (caller is responsible for safety/validation).
     - return_results: when False, only returns execution status.
     """
-    client = boto3.client("redshift-data")
+    client = boto3.client("redshift-data",region_name="us-east-1")
     try:
         resp = client.execute_statement(
             WorkgroupName=WORKGROUP,

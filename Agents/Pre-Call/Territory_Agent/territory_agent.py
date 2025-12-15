@@ -51,6 +51,35 @@ def get_parameter_value(parameter_name):
         print(f"Error fetching parameter {parameter_name}: {str(e)}")
         return None
 
+def _parse_scopes(s: str) -> list[str]:
+    """
+    Parse a comma or space-separated string of OAuth scopes into a list.
+
+    Args:
+        s (str): A string containing scopes separated by commas or spaces.
+
+    Returns:
+        list[str]: A list of parsed scope strings, with empty strings filtered out.
+    """
+    if not s:
+        return []
+    parts = re.split(r"[,\s]+", s.strip())
+    return [p for p in parts if p]
+
+# Fetch HCP schema columns configuration from SSM
+HCP_SCHEMA_COLUMNS = get_parameter_value("SC_HCP_SCHEMA_COLUMNS")
+
+# Fetch MCP Gateway URL for tool access from SSM
+MCP_GATEWAY_URL = get_parameter_value("MCP_GATEWAY_URL")
+
+# Fetch OAuth provider name and scopes for M2M authentication from SSM
+OAUTH_PROVIDER_NAME = get_parameter_value("PROVIDER_NAME")
+OAUTH_SCOPE = _parse_scopes(get_parameter_value("SCOPE"))
+
+# Fetch OpenSearch Serverless (AOSS) configuration from SSM Parameter Store
+SC_AOSS_ENDPOINT = get_parameter_value("SALES_COPILOT_AOSS_ENDPOINT")
+SC_HCP_AOSS_INDEX = get_parameter_value("SC_HCP_AOSS_INDEX")
+
 # Fetch Bedrock embedding model configuration from SSM Parameter Store
 BEDROCK_EMBED_MODEL = get_parameter_value("SALES_COPILOT_BEDROCK_EMBED_MODEL")
 
@@ -93,35 +122,7 @@ opensearch_client = _aoss_client()
 
 
 
-def _parse_scopes(s: str) -> list[str]:
-    """
-    Parse a comma or space-separated string of OAuth scopes into a list.
 
-    Args:
-        s (str): A string containing scopes separated by commas or spaces.
-
-    Returns:
-        list[str]: A list of parsed scope strings, with empty strings filtered out.
-    """
-    if not s:
-        return []
-    parts = re.split(r"[,\s]+", s.strip())
-    return [p for p in parts if p]
-
-
-# Fetch HCP schema columns configuration from SSM
-HCP_SCHEMA_COLUMNS = get_parameter_value("SC_HCP_SCHEMA_COLUMNS")
-
-# Fetch MCP Gateway URL for tool access from SSM
-MCP_GATEWAY_URL = get_parameter_value("MCP_GATEWAY_URL")
-
-# Fetch OAuth provider name and scopes for M2M authentication from SSM
-OAUTH_PROVIDER_NAME = get_parameter_value("PROVIDER_NAME")
-OAUTH_SCOPE = _parse_scopes(get_parameter_value("SCOPE"))
-
-# Fetch OpenSearch Serverless (AOSS) configuration from SSM Parameter Store
-SC_AOSS_ENDPOINT = get_parameter_value("SALES_COPILOT_AOSS_ENDPOINT")
-SC_HCP_AOSS_INDEX = get_parameter_value("SC_HCP_AOSS_INDEX")
 
 # Index name for HCP schema context storage in AOSS
 INDEX_NAME = SC_HCP_AOSS_INDEX
@@ -380,7 +381,7 @@ def create_agent():
             - For unknown/unspecified territories, group results by territory_id and rank 
               territories by strategic importance
             - Always produce SQL that can run directly on Redshift without modification
-            - Normalize priority_score between 0-100 range
+            - Normalize priority_score only, between 0-100 range
             - Final output to user MUST include: ranked list + reason codes + brief explanation 
               of ranking logic
 
@@ -388,6 +389,16 @@ def create_agent():
             - Use only execute_redshift_sql tool for data fetching - NEVER invent data
             - Use retrieve_territory_context for schema and query pattern discovery
             - Call tools in the order specified in the workflow section above
+
+            ##Tool Usage Rules:
+            - ALWAYS return valid JSON from tools, never raise exceptions
+            - If a tool fails, return {{"error": "description", "data": []}}
+            - NEVER call the same tool twice in one turn
+            - Wait for tool results before making next tool call
+
+            ##Error Handling:
+            - If retrieve_territory_context fails, proceed with basic schema knowledge
+            - If execute_redshift_sql fails, return "Unable to fetch data, please try again"
         """,
         tools=get_full_tools_list(mcp_client) + [retrieve_territory_context]
     )

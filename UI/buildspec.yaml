@@ -2,216 +2,80 @@ version: 0.2
 
 env:
   variables:
-    # Required variables - set these in CodeBuild project
     S3_BUCKET: "sales-copilot-ui-bucket"
     CLOUDFRONT_DISTRIBUTION_ID: "E3A3BNSRWFHF9V"
     BUILD_OUTPUT_DIR: "dist"
     AWS_REGION: "us-east-1"
-    
-    # Optional variables with defaults
     GIT_BRANCH: "main"
     NODE_VERSION: "18"
     INVALIDATION_PATHS: "/*"
     CACHE_CONTROL_STATIC: "public, max-age=31536000, immutable"
     CACHE_CONTROL_HTML: "public, max-age=3600, must-revalidate"
-    
+
 phases:
   install:
     runtime-versions:
       nodejs: 18
     commands:
-      - pwd
-      - ls -R
       - echo "=== INSTALL PHASE ==="
-      - echo "CodeBuild Build ID: $CODEBUILD_BUILD_ID"
-      - echo "CodeBuild Source Version: $CODEBUILD_SOURCE_VERSION"
-      - echo "CodeBuild Source Repo: $CODEBUILD_SOURCE_REPO_URL"
-      - echo "Working directory: $(pwd)"
-      
-      # Install system dependencies
+      - pwd
       - yum update -y
       - yum install -y git jq tar gzip
-      
-      # Configure Git (important for Git operations)
-      - git config --global user.email "codebuild@example.com"
-      - git config --global user.name "AWS CodeBuild"
-      - git config --global credential.helper '!aws codecommit credential-helper $@'
-      - git config --global credential.UseHttpPath true
-      
-      # Install AWS CLI v2 if not present
-      - if ! command -v aws &> /dev/null; then
-          curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-          unzip awscliv2.zip
-          sudo ./aws/install
-        fi
-      
-      # Show environment info
-      - echo "Node version: $(node --version)"
-      - echo "NPM version: $(npm --version)"
-      - echo "Git version: $(git --version)"
-      - echo "AWS CLI version: $(aws --version)"
-      
-      # Clone repository if not already cloned (for direct CodeBuild runs)
+
       - |
-        if [ -z "$CODEBUILD_SOURCE_VERSION" ] && [ ! -d .git ]; then
-          echo "Cloning repository directly..."
-          git clone --branch $GIT_BRANCH https://github.com/vivekapexon/sales-copilot.git .
-        else
-          echo "Repository already available via CodePipeline"
-        fi
+          if ! command -v aws &> /dev/null; then
+            curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+            unzip awscliv2.zip
+            ./aws/install
+          fi
+
+      - node --version
+      - npm --version
+      - aws --version
 
   pre_build:
     commands:
-      - echo "=== PRE-BUILD PHASE ==="
-      - echo "Current branch: $(git branch --show-current 2>/dev/null || echo 'detached')"
-      - echo "Last commit: $(git log -1 --oneline 2>/dev/null || echo 'No git info')"
-      
-      # Check for specific files to determine project type
-      - npm ci  # Clean install for consistency
-      
-      # Run security checks
-      - npm audit --production || true  # Don't fail on audit warnings
-      
-      # Run tests if they exist
-      - |
-        if [ -f "package.json" ] && grep -q '"test"' package.json; then
-          echo "Running tests..."
-          npm test
-        fi
+      - npm ci
+      - npm audit --production || true
 
   build:
     commands:
-      - echo "=== BUILD PHASE ==="
-      - echo "Build timestamp: $(date)"
-      
-      # Determine build command based on project type
-      - echo "Running npm build..."
       - npm run build
-
-      
-      # Create build metadata
-      - echo "Build ID: $CODEBUILD_BUILD_ID" > $BUILD_OUTPUT_DIR/build-info.txt
-      - echo "Commit: $(git rev-parse HEAD 2>/dev/null || echo 'unknown')" >> $BUILD_OUTPUT_DIR/build-info.txt
-      - echo "Build Date: $(date)" >> $BUILD_OUTPUT_DIR/build-info.txt
-      - echo "Branch: $(git branch --show-current 2>/dev/null || echo 'unknown')" >> $BUILD_OUTPUT_DIR/build-info.txt
-      
-      # Show build output
-      - echo "Build output directory contents ($BUILD_OUTPUT_DIR):"
-      - ls -la $BUILD_OUTPUT_DIR/ 2>/dev/null || echo "No build output directory found"
+      - |
+          echo "Build ID: $CODEBUILD_BUILD_ID" > $BUILD_OUTPUT_DIR/build-info.txt
+          echo "Commit: $(git rev-parse HEAD || echo unknown)" >> $BUILD_OUTPUT_DIR/build-info.txt
+          echo "Build Date: $(date)" >> $BUILD_OUTPUT_DIR/build-info.txt
 
   post_build:
     commands:
-      - echo "=== POST-BUILD PHASE ==="
-      - echo "Starting deployment to S3 and CloudFront..."
-      
-      # Check if build output exists
       - |
-        if [ ! -d "$BUILD_OUTPUT_DIR" ] || [ -z "$(ls -A $BUILD_OUTPUT_DIR/ 2>/dev/null)" ]; then
-          echo "ERROR: Build output directory '$BUILD_OUTPUT_DIR' is empty or doesn't exist!"
-          echo "Current directory contents:"
-          ls -la
-          exit 1
-        fi
-      
-      # Deploy static assets with proper caching headers
-      - echo "Deploying static assets (CSS, JS, images, fonts)..."
+          if [ ! -d "$BUILD_OUTPUT_DIR" ]; then
+            echo "ERROR: Build output directory not found"
+            exit 1
+          fi
+
       - |
-        aws s3 sync $BUILD_OUTPUT_DIR/ s3://$S3_BUCKET/ \
-          --exclude "*.html" \
-          --exclude "*.json" \
-          --exclude "*.xml" \
-          --exclude "*.txt" \
-          --cache-control "$CACHE_CONTROL_STATIC" \
-          --metadata-directive REPLACE \
-          --size-only \
-          --delete \
-          --no-progress
-      
-      # Deploy HTML files with different cache headers
-      - echo "Deploying HTML files..."
+          aws s3 sync $BUILD_OUTPUT_DIR/ s3://$S3_BUCKET/ \
+            --exclude "*.html" \
+            --cache-control "$CACHE_CONTROL_STATIC" \
+            --delete
+
       - |
-        aws s3 sync $BUILD_OUTPUT_DIR/ s3://$S3_BUCKET/ \
-          --include "*.html" \
-          --include "*.json" \
-          --include "*.xml" \
-          --include "*.txt" \
-          --cache-control "$CACHE_CONTROL_HTML" \
-          --metadata-directive REPLACE \
-          --content-type "text/html; charset=utf-8" \
-          --delete \
-          --no-progress
-      
-      # Set S3 bucket website configuration (if needed)
+          aws s3 sync $BUILD_OUTPUT_DIR/ s3://$S3_BUCKET/ \
+            --include "*.html" \
+            --cache-control "$CACHE_CONTROL_HTML" \
+            --delete
+
       - |
-        echo "Configuring S3 static website hosting..."
-        aws s3api put-bucket-website \
-          --bucket $S3_BUCKET \
-          --website-configuration '{
-            "ErrorDocument": {"Key": "index.html"},
-            "IndexDocument": {"Suffix": "index.html"}
-          }' || echo "Bucket website config already set or not needed"
-      
-      # Create CloudFront cache invalidation
-      - echo "Creating CloudFront cache invalidation..."
-      - |
-        INVALIDATION_ID=$(aws cloudfront create-invalidation \
-          --distribution-id $CLOUDFRONT_DISTRIBUTION_ID \
-          --paths "$INVALIDATION_PATHS" \
-          --query 'Invalidation.Id' \
-          --output text)
-        
-        echo "✅ CloudFront invalidation created: $INVALIDATION_ID"
-        
-        # Wait for invalidation to complete (optional)
-        echo "Waiting for invalidation to complete..."
-        aws cloudfront wait invalidation-completed \
-          --distribution-id $CLOUDFRONT_DISTRIBUTION_ID \
-          --id $INVALIDATION_ID \
-          || echo "Note: Invalidation might still be in progress"
-      
-  
-      # Send deployment notification (optional)
-      - |
-        echo "Deployment completed successfully!"
-        echo "=========================================="
-        echo "S3 Bucket: $S3_BUCKET"
-        echo "CloudFront Distribution: $CLOUDFRONT_DISTRIBUTION_ID"
-        echo "Invalidation ID: $INVALIDATION_ID"
-        echo "Build ID: $CODEBUILD_BUILD_ID"
-        echo "Commit: $(git rev-parse --short HEAD 2>/dev/null || echo 'unknown')"
-        echo "=========================================="
+          aws cloudfront create-invalidation \
+            --distribution-id $CLOUDFRONT_DISTRIBUTION_ID \
+            --paths "$INVALIDATION_PATHS"
 
 artifacts:
   files:
     - '**/*'
   base-directory: $BUILD_OUTPUT_DIR
-  name: build-artifacts-$(date +%Y%m%d-%H%M%S)
-  discard-paths: no
-  
-  # Upload to S3 for backup (optional)
-  #s3-prefix: builds/
-  #s3-bucket: $S3_BUCKET
 
 cache:
   paths:
-    - 'node_modules/**/*'
-    - '.npm/**/*'
-    - '.cache/**/*'
-  type: LOCAL
-  modes:
-    - LOCAL_CUSTOM_CACHE
-    - LOCAL_DOCKER_LAYER_CACHE
-    - LOCAL_SOURCE_CACHE
-
-reports:
-  test-report:
-    files:
-      - "test-results/**/*"
-    file-format: JUNITXML
-    base-directory: "."
-    
-  coverage-report:
-    files:
-      - "coverage/**/*"
-    file-format: COBERTURAXML
-    base-directory: "."
+    - node_modules/**/*

@@ -7,7 +7,7 @@ env:
     BUILD_OUTPUT_DIR: "dist"
     AWS_REGION: "us-east-1"
     GIT_BRANCH: "main"
-    NODE_VERSION: "18"
+    NODE_VERSION: "10"
     INVALIDATION_PATHS: "/*"
     CACHE_CONTROL_STATIC: "public, max-age=31536000, immutable"
     CACHE_CONTROL_HTML: "public, max-age=3600, must-revalidate"

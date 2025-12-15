@@ -16,7 +16,7 @@ phases:
   install:
     commands:
       - echo "=== INSTALL PHASE ==="
-      - n 22.16.0
+      - n 20
       - pwd
 
 

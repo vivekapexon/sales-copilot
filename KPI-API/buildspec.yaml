@@ -2,10 +2,10 @@ version: 0.2
 
 env:
   variables:
-    EC2_HOST=e34.228.157.60
-    EC2_USER=ubuntu
-    APP_DIR=/home/ubuntu/fastapi-app
-    SSH_KEY_SECRET=fastapi-ssh-key
+    EC2_HOST: "34.228.157.60"
+    EC2_USER: "ubuntu"
+    APP_DIR: "/home/ubuntu/fastapi-app"
+    SSH_KEY_SECRET: "fastapi-ssh-key"
 
 
 phases:
@@ -97,4 +97,3 @@ artifacts:
   files:
     - '**/*'
   base-directory: $BUILD_OUTPUT_DIR
-

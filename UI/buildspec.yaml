@@ -14,10 +14,9 @@ env:
 
 phases:
   install:
-    runtime-versions:
-      nodejs: 22
     commands:
       - echo "=== INSTALL PHASE ==="
+      - n 22.16.0
       - pwd
 
       - |

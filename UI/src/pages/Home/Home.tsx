@@ -221,7 +221,6 @@ const GenAIPage = ({ heading, setIsNewChat }: ChatPageProps) => {
         role: "assistant",
       };
       console.log(msgObj);
-      debugger;
       addChatToSession(msgObj);
       // saveMessage(currentRunId, fullResponse, "assistant");
     } catch (error) {

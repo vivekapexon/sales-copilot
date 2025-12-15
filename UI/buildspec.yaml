@@ -20,6 +20,8 @@ phases:
     runtime-versions:
       nodejs: 18
     commands:
+      - pwd
+      - ls -R
       - echo "=== INSTALL PHASE ==="
       - echo "CodeBuild Build ID: $CODEBUILD_BUILD_ID"
       - echo "CodeBuild Source Version: $CODEBUILD_SOURCE_VERSION"

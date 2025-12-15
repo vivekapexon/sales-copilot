@@ -91,8 +91,6 @@ def _aoss_client():
 # Initialize OpenSearch Serverless client for RAG context retrieval
 opensearch_client = _aoss_client()
 
-# Index name for HCP schema context storage in AOSS
-INDEX_NAME = SC_HCP_AOSS_INDEX
 
 
 def _parse_scopes(s: str) -> list[str]:
@@ -124,6 +122,9 @@ OAUTH_SCOPE = _parse_scopes(get_parameter_value("SCOPE"))
 # Fetch OpenSearch Serverless (AOSS) configuration from SSM Parameter Store
 SC_AOSS_ENDPOINT = get_parameter_value("SALES_COPILOT_AOSS_ENDPOINT")
 SC_HCP_AOSS_INDEX = get_parameter_value("SC_HCP_AOSS_INDEX")
+
+# Index name for HCP schema context storage in AOSS
+INDEX_NAME = SC_HCP_AOSS_INDEX
 
 # ---------------------------------------------------
 # 1) Identity & Access Bootstrap

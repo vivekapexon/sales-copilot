@@ -63,13 +63,13 @@ def build_response_from_row(row: Dict[str, Any]) -> Dict[str, Any]:
     total_hcp_contacted_today = int(safe_number(row.get("total_hcp_contacted_today") or 0))
 
     return {
-        "pre-call-kpis": {
+        "pre_call_kpis": {
             "total_hcps": total_hcps,
             "total_interacted_hcps": total_interacted_hcps,
             "followup_emails_sent": followup_emails_sent,
             "scheduled_calls_next_7d": scheduled_calls_next_7d
         },
-        "post-call-kpis": {
+        "post_call_kpis": {
             "action_items_pending": action_items_pending,
             "sample_request_qty_30d": sample_request_qty_30d,
             "followups_sent_last_30d": followups_sent_last_30d,

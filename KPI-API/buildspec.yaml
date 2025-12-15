@@ -2,10 +2,13 @@ version: 0.2
 
 env:
   variables:
-    EC2_HOST: "34.228.157.60"
-    EC2_USER: "ubuntu"
-    APP_DIR: "/home/ubuntu/fastapi-app"
-    SSH_KEY_SECRET: "/fastapi-ssh-key"
+    # Required - set in CodeBuild project
+    APP_NAME: "KPI-API"
+    ENVIRONMENT: "production"
+    S3_BUCKET: "sales-copilot-bucket "
+    S3_KEY_PREFIX: "KPI"
+    SSH_KEY_SECRET: "fastapi-ssh-key"
+    INSTANCE_ID: "i-0a61361574607b8f4"
 
 
 phases:
@@ -21,7 +24,7 @@ phases:
           if ! command -v aws &> /dev/null; then
             curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
             unzip awscliv2.zip
-            ./aws/install --update
+            ./aws/install
           fi
 
       - python --version
@@ -30,73 +33,227 @@ phases:
   pre_build:
     commands:
       - echo "Fetching SSH key"
-
-      - |
-          aws ssm get-parameter \
-            --name $SSH_KEY_SECRET \
-            --with-decryption \
-            --output text > fastapi-key.pem
-      
+      - aws secretsmanager get-secret-value \
+          --secret-id $SSH_KEY_SECRET \
+          --query SecretString \
+          --output text > fastapi-key.pem
       - chmod 600 fastapi-key.pem
 
   build:
     commands:
-      - echo "Removing old application"
+      - echo "=== BUILD PHASE ==="
+      
+      # Create deployment package
+      - echo "Creating deployment package..."
+      - DEPLOY_DIR="deploy_$(date +%Y%m%d_%H%M%S)"
+      - mkdir -p $DEPLOY_DIR
+      
+      # Copy application files
+      - cp -r KPI-API $DEPLOY_DIR/
+
       - |
-        ssh -o StrictHostKeyChecking=no \
-        -i fastapi-key.pem \
-        $EC2_USER@$EC2_HOST << 'EOF'
-          sudo systemctl stop fastapi || true
+        cat > $DEPLOY_DIR/start.sh << 'EOF'
+        #!/bin/bash
+        set -e
+        
+        # Setup virtual environment
+        if [ ! -d "/home/ubuntu/KPI" ]; then
+          python3 -m venv /home/ubuntu/KPI
+        fi
+                
 
-          rm -rf $APP_DIR          
-
+        # Activate virtual environment
+        source /home/ubuntu/KPI/bin/activate
+        
+        # Install/upgrade dependencies
+        pip install -r requirements.txt
+        
+        # Start FastAPI with uvicorn
+        uvicorn app.main:app \
+          --host 0.0.0.0 \
+          --port 8000 \
+          --workers 4 \
+          --log-level info \
+          --proxy-headers \
+          --forwarded-allow-ips '*'
         EOF
-
-
-      - echo "Copying files to EC2"
-      - |
-        scp -o StrictHostKeyChecking=no \
-        -i fastapi-key.pem \
-        -r KPI-API/* \
-        $EC2_USER@$EC2_HOST:$APP_DIR/
+        
+        chmod +x $DEPLOY_DIR/start.sh
 
       # Create systemd service file
       - |
         cat > $DEPLOY_DIR/$APP_NAME.service << EOF
         [Unit]
-        Description=FastAPI App
+        Description=FastAPI Application
         After=network.target
-
+        
         [Service]
-        User=ec2-user
-        WorkingDirectory=/home/ubuntu/fastapi-app
-        ExecStart=/usr/local/bin/gunicorn app.main:app \
-            -k uvicorn.workers.UvicornWorker \
-            --bind 0.0.0.0:8000
+        User=ubuntu
+        Group=ubuntu
+        WorkingDirectory=/home/ubuntu/$APP_NAME
+        Environment="PATH=/home/ubuntu/KPI/bin"
+        ExecStart=/home/ubuntu/$APP_NAME/start.sh
         Restart=always
-
+        RestartSec=10
+        StandardOutput=journal
+        StandardError=journal
+        
         [Install]
         WantedBy=multi-user.target
         EOF
 
-
-      - echo "Installing deps and restarting service"
+      # Create deployment script
       - |
-        ssh -o StrictHostKeyChecking=no \
-        -i fastapi-key.pem \
-        $EC2_USER@$EC2_HOST << 'EOF'
-          cd $APP_DIR
-          python3 -m venv KPI-API
-          source KPI-API/bin/activate
+        cat > $DEPLOY_DIR/deploy.sh << 'EOF'
+        #!/bin/bash
+        set -e
+        
+        echo "Starting deployment..."
+        
+        # Stop existing service
+        sudo systemctl stop $APP_NAME.service || true
+        
+        # Backup current deployment
+        BACKUP_DIR="/home/ubuntu/backups/$(date +%Y%m%d_%H%M%S)"
+        mkdir -p $BACKUP_DIR
+        if [ -d "/home/ubuntu/$APP_NAME" ]; then
+          cp -r /home/ubuntu/$APP_NAME/* $BACKUP_DIR/ || true
+        fi
+        
+        # Remove old deployment
+        rm -rf /home/ubuntu/$APP_NAME
+        
+        # Copy new deployment
+        cp -r /tmp/deployment/* /home/ubuntu/$APP_NAME/
+        chown -R ubuntu:ubuntu /home/ubuntu/$APP_NAME
+        chmod +x /home/ubuntu/$APP_NAME/start.sh
+        
 
-          pip3 install -r requirements.txt
-
-          sudo systemctl stop fastapi || true
-          sudo systemctl start fastapi
+        # Install systemd service
+        sudo cp /home/ubuntu/$APP_NAME/$APP_NAME.service /etc/systemd/system/
+        sudo systemctl daemon-reload
+        sudo systemctl enable $APP_NAME.service
+        
+        # Start service
+        sudo systemctl start $APP_NAME.service
+        
+        # Check service status
+        sleep 5
+        sudo systemctl status $APP_NAME.service
+        
+        echo "Deployment completed!"
         EOF
+
+        chmod +x $DEPLOY_DIR/deploy.sh
+
+
+      # Package for deployment
+      - echo "Creating deployment package..."
+      - cd $DEPLOY_DIR
+      - zip -r ../deployment.zip .
+      - cd ..
+      
+      # Upload to S3
+      - S3_KEY="$S3_KEY_PREFIX/$APP_NAME/$CODEBUILD_BUILD_ID.zip"
+      - echo "Uploading to S3: s3://$S3_BUCKET/$S3_KEY"
+      - aws s3 cp deployment.zip s3://$S3_BUCKET/$S3_KEY
+
+      # Save deployment metadata
+      - |
+        cat > deployment-info.json << EOF
+        {
+          "build_id": "$CODEBUILD_BUILD_ID",
+          "app_name": "$APP_NAME",
+          "environment": "$ENVIRONMENT",
+          "s3_key": "$S3_KEY",
+          "timestamp": "$(date -u +'%Y-%m-%dT%H:%M:%SZ')",
+          "commit": "$(git rev-parse HEAD 2>/dev/null || echo 'unknown')"
+        }
+        EOF
+        
+        aws s3 cp deployment-info.json s3://$S3_BUCKET/$S3_KEY_PREFIX/$APP_NAME/deployment-info.json
+
+  post_build:
+    commands:
+      - echo "=== POST-BUILD PHASE ==="
+      - source venv/bin/activate
+
+      # Deploy to each EC2 instance using AWS Systems Manager (SSM)
+      - |
+        echo "Deploying to instance: $INSTANCE_ID"
+        
+        # Create SSM document for deployment
+        DEPLOY_DOCUMENT="DeployFastAPI-$(date +%s)"
+        
+        cat > /tmp/deploy-document.json << EOF
+        {
+          "schemaVersion": "2.2",
+          "description": "Deploy FastAPI application",
+          "parameters": {
+            "S3Bucket": {
+              "type": "String",
+              "default": "$S3_BUCKET"
+            },
+            "S3Key": {
+              "type": "String",
+              "default": "$S3_KEY"
+            },
+            "AppName": {
+              "type": "String",
+              "default": "$APP_NAME"
+            }
+          },
+          "mainSteps": [
+            {
+              "action": "aws:downloadContent",
+              "name": "DownloadDeployment",
+              "inputs": {
+                "sourceType": "S3",
+                "sourceInfo": "{\"path\":\"https://s3.amazonaws.com/{{S3Bucket}}/{{S3Key}}\"}",
+                "destinationPath": "/tmp/deployment.zip"
+              }
+            },
+            {
+              "action": "aws:runShellScript",
+              "name": "ExtractDeployment",
+              "inputs": {
+                "runCommand": [
+                  "mkdir -p /tmp/deployment",
+                  "unzip -o /tmp/deployment.zip -d /tmp/deployment/",
+                  "chmod +x /tmp/deployment/deploy.sh",
+                  "APP_NAME={{AppName}} /tmp/deployment/deploy.sh"
+                ]
+              }
+            }
+          ]
+        }
+        EOF
+
+        # Send command via SSM
+        aws ssm send-command \
+          --instance-ids $INSTANCE_ID \
+          --document-name "AWS-RunShellScript" \
+          --parameters '{"commands":[
+            "mkdir -p /tmp/deployment",
+            "aws s3 cp s3://'"$S3_BUCKET"'/'"$S3_KEY"' /tmp/deployment.zip",
+            "unzip -o /tmp/deployment.zip -d /tmp/deployment/",
+            "chmod +x /tmp/deployment/deploy.sh",
+            "cd /tmp/deployment && APP_NAME='"$APP_NAME"' ./deploy.sh"
+          ]}' \
+          --output-s3-bucket-name "$S3_BUCKET" \
+          --output-s3-key-prefix "ssm-logs/$INSTANCE_ID" \
+          --comment "Deploying $APP_NAME build $CODEBUILD_BUILD_ID"
+        
+        echo "Deployment command sent to $INSTANCE_ID"
+
+
+      - |
+        echo "Waiting for deployments to complete..."
+        sleep 30                                                               
 
 
 artifacts:
   files:
     - '**/*'
   base-directory: $BUILD_OUTPUT_DIR
+

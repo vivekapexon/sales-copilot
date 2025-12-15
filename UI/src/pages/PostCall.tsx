@@ -1,50 +1,41 @@
-import { useEffect, useState } from "react";
-import KPIContainer from "../components/KPIContainer";
+import { useEffect, useRef, useState } from "react";
+import { StatCard } from "../components/KPIContainer";
 import GenAIPage from "./Home/Home";
 import {
   Button,
   SpaceBetween,
   Box,
   Container,
+  Grid,
 } from "@cloudscape-design/components";
 import { useSearchParams } from "react-router-dom";
+import { getKPIData } from "../api/api-service";
 
 const PostCall = () => {
   const [isNewChat, setIsNewChat] = useState<boolean>(false);
 
   const [searchParams] = useSearchParams();
   const sessionIdFromUrl = searchParams.get("session");
-  const kpiData = [
-    {
-      kpiName: "Total Activities",
-      score: "50",
-      statMessage: "+67% vs. baseline",
-      trendup: "up",
-    },
-    {
-      kpiName: "Critical Threats",
-      score: "4",
-      statMessage: "Vertex dominance",
-      trendup: "up",
-    },
-    {
-      kpiName: "Strategies Generated",
-      score: "8",
-      statMessage: "Multi-tier response",
-      trendup: "up",
-    },
-    {
-      kpiName: "Overall Threat Level",
-      score: "Critical",
-      statMessage: "Max threat score: 10",
-      trendup: "up",
-    },
-  ];
-
+  const [kpiData, setKpiData] = useState({
+    action_items_pending: 0,
+    followups_sent_last_30d: 0,
+    sample_request_qty_30d: 0,
+    total_hcp_contacted_today: 0,
+  });
+  const didFetch = useRef(false);
   const handleNewChat = () => {
     localStorage.removeItem("token");
+    localStorage.removeItem("sessionId");
     setIsNewChat(true);
   };
+  useEffect(() => {
+    if (didFetch.current) return;
+    didFetch.current = true;
+
+    getKPIData().then((res) => {
+      setKpiData(res?.post_call_kpis);
+    });
+  }, []);
 
   useEffect(() => {
     if (sessionIdFromUrl) setIsNewChat(true);
@@ -55,7 +46,51 @@ const PostCall = () => {
       {!isNewChat && (
         <>
           <SpaceBetween direction="vertical" size="s">
-            <KPIContainer kpiData={kpiData} />
+            <Grid
+              gridDefinition={[
+                { colspan: { default: 12, xs: 12, s: 3, l: 3 } },
+                { colspan: { default: 12, xs: 12, s: 3, l: 3 } },
+                { colspan: { default: 12, xs: 12, s: 3, l: 3 } },
+                { colspan: { default: 12, xs: 12, s: 3, l: 3 } },
+              ]}
+            >
+              <Box key={"s0"} padding={"n"}>
+                <StatCard
+                  statData={{
+                    kpiName: "Pending Actions",
+                    score: kpiData?.action_items_pending,
+                  }}
+                  index={1}
+                />
+              </Box>
+              <Box key={"s1"} padding={"n"}>
+                <StatCard
+                  statData={{
+                    kpiName: "Followup Sent in 30 Days",
+                    score: kpiData?.followups_sent_last_30d,
+                  }}
+                  index={2}
+                />
+              </Box>
+              <Box key={"s2"} padding={"n"}>
+                <StatCard
+                  statData={{
+                    kpiName: "Sample Requests",
+                    score: kpiData?.sample_request_qty_30d,
+                  }}
+                  index={3}
+                />
+              </Box>
+              <Box key={"s3"} padding={"n"}>
+                <StatCard
+                  statData={{
+                    kpiName: "Contacted HCPs",
+                    score: kpiData?.total_hcp_contacted_today,
+                  }}
+                  index={4}
+                />
+              </Box>
+            </Grid>
             <Container>
               <SpaceBetween direction="vertical" size="s">
                 <SpaceBetween direction="vertical" size="xxs">

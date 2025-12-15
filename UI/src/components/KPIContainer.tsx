@@ -11,7 +11,7 @@ interface StatCardProps {
   index: number;
 }
 
-const StatCard = ({ statData }: StatCardProps) => {
+export const StatCard = ({ statData }: StatCardProps) => {
   return (
     <Container fitHeight>
       <Box>
@@ -31,7 +31,7 @@ const StatCard = ({ statData }: StatCardProps) => {
         <Box variant="h1" padding={"n"} fontSize="heading-xl">
           {statData.score}
         </Box>
-        {statData.trendup == "up" && (
+        {/* {statData.trendup == "up" && (
           <Box variant="p" padding={"xs"} color={"text-status-success"}>
             <TrendingUp
               style={{ verticalAlign: "middle" }}
@@ -49,7 +49,7 @@ const StatCard = ({ statData }: StatCardProps) => {
             />{" "}
             {statData.statMessage}
           </Box>
-        )}
+        )} */}
       </Box>
     </Container>
   );

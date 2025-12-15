@@ -3,7 +3,7 @@ import type { AxiosInstance } from 'axios';
 import type { User } from '../models';
 
 const api: AxiosInstance = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'https://6pexfv4ru7.execute-api.us-east-1.amazonaws.com',
+  baseURL: import.meta.env.VITE_KPI_API_URL,
 });
 
 // Request interceptor to add bearer token
@@ -36,6 +36,7 @@ export default api;
 
 // Common API call function
 export const apiCall = async (method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH', url: string, data?: any) => {
+  // url = 'https://6pexfv4ru7.execute-api.us-east-1.amazonaws.com/'+url
   const response = await api.request({
     method,
     url,
@@ -59,44 +60,56 @@ export const getSessions = async (agentId:string) => {
     }
     
 };
-export const getSessionById = async (sessionId:string) => {
-    const storedUser = localStorage.getItem("auth_user");
+// export const getSessionById = async (sessionId:string) => {
+//     const storedUser = localStorage.getItem("auth_user");
      
-    if(storedUser){
-        const user:User = JSON.parse(storedUser);
-     console.log(user.username)
-    const url = `sessions/${sessionId}?user_id=${user?.username}`;
-    return await apiCall('GET', url);
-    }
+//     if(storedUser){
+//         const user:User = JSON.parse(storedUser);
+//      console.log(user.username)
+//     const url = `sessions/${sessionId}?user_id=${user?.username}`;
+//     return await apiCall('GET', url);
+//     }
     
-};
-export const addMessage = async (sessionId:string,messages:any) => {
-    const storedUser = localStorage.getItem("auth_user");
+// };
+// export const addMessage = async (sessionId:string,messages:any) => {
+//     const storedUser = localStorage.getItem("auth_user");
      
-    if(storedUser){
-        const user:User = JSON.parse(storedUser);
-     console.log(user.username)
-    const url = `sessions/${sessionId}/messages?user_id=${user?.username}`;
-    return await apiCall('POST', url,messages);
-    }
+//     if(storedUser){
+//         const user:User = JSON.parse(storedUser);
+//      console.log(user.username)
+//     const url = `sessions/${sessionId}/messages?user_id=${user?.username}`;
+//     return await apiCall('POST', url,messages);
+//     }
     
-};
+// };
 
-export const createMessage = async (sessionId:string,prompt:string,agentId:string,role:string='user') => {
+// export const createMessage = async (sessionId:string,prompt:string,agentId:string,role:string='user') => {
+//     const storedUser = localStorage.getItem("auth_user");
+     
+//     if(storedUser){
+//         const user:User = JSON.parse(storedUser);
+//      console.log(user.username)
+//      const payload = {
+//         user_id:user?.username,
+//         session_id:sessionId,
+//         agent_id: agentId,
+//         title:prompt,
+//         role:role
+//      }
+//     const url = `/sessions?user_id=${user?.username}`;
+//     return await apiCall('POST', url,payload);
+//     }
+    
+// };
+
+export const getKPIData = async () => {
     const storedUser = localStorage.getItem("auth_user");
      
     if(storedUser){
         const user:User = JSON.parse(storedUser);
-     console.log(user.username)
-     const payload = {
-        user_id:user?.username,
-        session_id:sessionId,
-        agent_id: agentId,
-        title:prompt,
-        role:role
-     }
-    const url = `/sessions?user_id=${user?.username}`;
-    return await apiCall('POST', url,payload);
+        
+    const url = `/kpi/overview?user_id=${user?.username}`;
+    return await apiCall('GET', url);
     }
     
 };

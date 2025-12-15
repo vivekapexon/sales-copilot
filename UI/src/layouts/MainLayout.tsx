@@ -10,18 +10,17 @@ import type { AppLayoutProps } from "@cloudscape-design/components/app-layout";
 import {
   Box,
   BreadcrumbGroup,
-  Link,
   List,
   SideNavigation,
   SpaceBetween,
   type SideNavigationProps,
 } from "@cloudscape-design/components";
-import { Outlet, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import HeaderComponent from "../components/Header";
 import { useStore } from "../store";
-import { getSessions } from "../api/api-service";
 import { useAuth } from "../context/AuthContext";
 import { ScrollableList } from "../components/Common";
+import { listChatHistory } from "../services/chatServices";
 
 const MainLayout = forwardRef<AppLayoutProps.Ref, AppLayoutProps>(
   function CustomAppLayout(props, ref) {
@@ -29,6 +28,7 @@ const MainLayout = forwardRef<AppLayoutProps.Ref, AppLayoutProps>(
     const { state, actions, appLayoutRef } = useStore();
     const { chatHistoryList, setChatHistoryList } = useAuth();
     const [filterText] = useState("");
+    const { user } = useAuth();
     const filteredChatHistory = chatHistoryList.filter((item) =>
       item.title.toLowerCase().includes(filterText.toLowerCase())
     );
@@ -42,7 +42,6 @@ const MainLayout = forwardRef<AppLayoutProps.Ref, AppLayoutProps>(
     const [selectedModule, setSelectedModule] = useState<any>(items[0]);
 
     const onNavChange = (link: any) => {
-      console.log(link);
       setSelectedModule(link);
 
       navigate(link.href);
@@ -60,7 +59,6 @@ const MainLayout = forwardRef<AppLayoutProps.Ref, AppLayoutProps>(
       if (state.notifications.length > 0) {
         window.scrollTo({ top: 0, behavior: "smooth" });
       }
-      console.log(ref);
     }, [state.notifications]);
 
     useEffect(() => {
@@ -68,12 +66,11 @@ const MainLayout = forwardRef<AppLayoutProps.Ref, AppLayoutProps>(
         .split(" ")[0]
         .replace("-", "")
         .toLowerCase();
-      const response = getSessions(module);
+
+      const response = listChatHistory(user?.username || "", module);
       response.then((res) => {
-        console.log(res);
         setChatHistoryList(res.sessions);
       });
-      console.log(selectedModule);
     }, [selectedModule]);
 
     return (
@@ -116,15 +113,15 @@ const MainLayout = forwardRef<AppLayoutProps.Ref, AppLayoutProps>(
                       renderItem={(item) => ({
                         id: item.session_id,
                         content: (
-                          <Link href={`?session=${item.session_id}`}>
-                            {item.title}
-                          </Link>
-                          // <NavLink
-                          //   to={`?session=${item.session_id}`}
-                          //   replace={true}
-                          // >
+                          // <Link href={`?session=${item.session_id}`}>
                           //   {item.title}
-                          // </NavLink>
+                          // </Link>
+                          <NavLink
+                            to={`?session=${item.session_id}`}
+                            replace={true}
+                          >
+                            {item.title}
+                          </NavLink>
                         ),
                       })}
                     />
@@ -141,7 +138,6 @@ const MainLayout = forwardRef<AppLayoutProps.Ref, AppLayoutProps>(
           // toolsHide={true}
           //   toolsOpen={state.toolsOpen}
           onToolsChange={(event) => {
-            console.log(event);
             actions.setToolsOpen(event.detail.open);
           }}
           toolsWidth={400}

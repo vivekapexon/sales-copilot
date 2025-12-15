@@ -21,6 +21,8 @@ import {
   CodeViewActions,
   //   FeedbackActions,
 } from "./Common";
+import Markdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 export default function Messages({
   messages = [],
@@ -95,7 +97,13 @@ export default function Messages({
                 <div
                   key={"" + message?.authorId + message?.timestamp + "content"}
                 >
-                  {message.content}
+                  {message.authorId?.toLowerCase() == "user" ? (
+                    <>{message.content}</>
+                  ) : (
+                    <Markdown
+                      remarkPlugins={[remarkGfm]}
+                    >{`${message.content}`}</Markdown>
+                  )}
                 </div>
                 {message.files && message.files.length > 0 && (
                   <FileTokenGroup

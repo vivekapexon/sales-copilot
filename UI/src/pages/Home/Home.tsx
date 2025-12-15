@@ -13,8 +13,6 @@ import Header from "@cloudscape-design/components/header";
 import { ScrollableContainer } from "../../components/Common";
 import Messages from "../../components/Message";
 import { Button, SpaceBetween } from "@cloudscape-design/components";
-import Markdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import { downloadPdf } from "../../api/downloadpdf";
 import { streamAgent } from "../../services/agentInvocationService";
 import {
@@ -24,7 +22,8 @@ import {
 } from "../../services/chatServices";
 import { generateSessionId } from "../../api/utils";
 import { useAuth } from "../../context/AuthContext";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import LogModal from "../../components/LogModal";
 
 interface ChatPageProps {
   heading: string;
@@ -53,7 +52,7 @@ const GenAIPage = ({ heading, setIsNewChat }: ChatPageProps) => {
   // const [currentMessage, setCurrentMessage] = useState("");
   const { user } = useAuth();
   const [searchParams] = useSearchParams();
-
+  const navigate = useNavigate();
   const sessionIdParam = searchParams.get("session");
   const [sessionId, setSessionId] = useState<string>(sessionIdParam || "");
 
@@ -135,18 +134,19 @@ const GenAIPage = ({ heading, setIsNewChat }: ChatPageProps) => {
     detail: { value: string };
   }) => {
     // setCurrentMessage(value);
-
+    let curSessionId = sessionId;
     if (!localStorage.getItem("sessionId")) {
       console.log("new session created");
-      const sessionId = generateSessionId(33);
-      setSessionId(sessionId);
+      curSessionId = generateSessionId(33);
+      setSessionId(curSessionId);
       const obj = {
-        session_id: sessionId,
-        agent_id: heading.replace(" ", "-").toLowerCase(),
+        session_id: curSessionId,
+        agent_id: heading.replace("-", "").toLowerCase(),
         title: value.length > 30 ? value.slice(0, 30) + "..." : value,
+        user_id: user?.username,
       };
       createChatSession(obj);
-      localStorage.setItem("sessionId", sessionId);
+      localStorage.setItem("sessionId", curSessionId);
     }
     // else{
     //   const payload = {
@@ -167,7 +167,7 @@ const GenAIPage = ({ heading, setIsNewChat }: ChatPageProps) => {
 
     setMessages((prevMessages) => [...prevMessages, newMessage]);
     const msgObj = {
-      session_id: sessionId,
+      session_id: curSessionId,
       content: value,
       user_id: user?.username,
       role: "user",
@@ -190,7 +190,7 @@ const GenAIPage = ({ heading, setIsNewChat }: ChatPageProps) => {
       await streamAgent(
         heading.replaceAll("-", "").toLowerCase(),
         prompt,
-        sessionId,
+        curSessionId,
         user?.username,
         (chunk) => {
           fullResponse += chunk;
@@ -200,13 +200,7 @@ const GenAIPage = ({ heading, setIsNewChat }: ChatPageProps) => {
               updated[botMessageIndex] = {
                 type: "chat-bubble",
                 authorId: "gen-ai",
-                content: (
-                  <>
-                    <Markdown
-                      remarkPlugins={[remarkGfm]}
-                    >{`${fullResponse}`}</Markdown>
-                  </>
-                ),
+                content: fullResponse,
                 timestamp: new Date().toLocaleTimeString(),
               };
             }
@@ -215,7 +209,7 @@ const GenAIPage = ({ heading, setIsNewChat }: ChatPageProps) => {
         }
       );
       const msgObj = {
-        session_id: sessionId,
+        session_id: curSessionId,
         content: fullResponse,
         user_id: user?.username,
         role: "assistant",
@@ -304,7 +298,13 @@ const GenAIPage = ({ heading, setIsNewChat }: ChatPageProps) => {
           actions={
             <SpaceBetween direction="horizontal" size="xs">
               <Button onClick={handleExport}>Download Chat</Button>
-              <Button iconName="arrow-left" onClick={() => setIsNewChat(false)}>
+              <Button
+                iconName="arrow-left"
+                onClick={() => {
+                  setIsNewChat(false);
+                  navigate(location.pathname, { replace: true });
+                }}
+              >
                 Back
               </Button>
             </SpaceBetween>

@@ -4,7 +4,6 @@ import { Container, Box, Grid } from "@cloudscape-design/components";
 // import totalActivitiesSVG from "../../../../assets/total-activities.svg";
 // import stratergiesSVG from "../../../../assets/stratergies.svg";
 // import threatLevelSVG from "../../../../assets/threat-level.svg";
-import { TrendingDown, TrendingUp } from "lucide-react";
 
 interface StatCardProps {
   statData: any;

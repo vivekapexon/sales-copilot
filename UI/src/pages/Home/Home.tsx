@@ -23,7 +23,6 @@ import {
 import { generateSessionId } from "../../api/utils";
 import { useAuth } from "../../context/AuthContext";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import LogModal from "../../components/LogModal";
 
 interface ChatPageProps {
   heading: string;

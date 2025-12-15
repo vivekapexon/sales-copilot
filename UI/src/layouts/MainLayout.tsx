@@ -43,7 +43,7 @@ const MainLayout = forwardRef<AppLayoutProps.Ref, AppLayoutProps>(
 
     const onNavChange = (link: any) => {
       setSelectedModule(link);
-
+      console.log(ref);
       navigate(link.href);
     };
 

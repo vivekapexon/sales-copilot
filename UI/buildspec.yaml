@@ -33,6 +33,7 @@ phases:
 
   pre_build:
     commands:
+      - cd UI
       - npm ci
       - npm audit --production || true
 

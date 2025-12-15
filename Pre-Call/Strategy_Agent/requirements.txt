@@ -1,8 +1,0 @@
-strands-agents
-strands-agents-tools
-bedrock-agentcore
-bedrock-agentcore-starter-toolkit
-opensearch-py
-numpy
-pandas
-uuid

@@ -11,21 +11,37 @@ env:
     INVALIDATION_PATHS: "/*"
     CACHE_CONTROL_STATIC: "public, max-age=31536000, immutable"
     CACHE_CONTROL_HTML: "public, max-age=3600, must-revalidate"
+    VITE_SALES_PRE_CALL_ENDPOINT: "arn:aws:bedrock-agentcore:us-east-1:969385807621:runtime/sc_prc_strategy_agent-fzs6N05eqb"
+    VITE_SALES_POST_CALL_ENDPOINT: "arn:aws:bedrock-agentcore:us-east-1:969385807621:runtime/sc_poc_supervisor_agent-M2IwWM48TC"
+    VITE_API_BASE_URL: "https://cmi7hm0pqa.execute-api.us-east-1.amazonaws.com/v1"
+    VITE_USE_COGNITO_DOMAIN: "https://salescopilot-agentcore-identity-pool-m3ozg.auth.us-east-1.amazoncognito.com"
+    VITE_USE_COGNITO_CLIENT_ID: "4r1qou4d7s8637rg9odrkpf9sf"
+    VITE_USE_COGNITO_REDIRECT_URI: "http://localhost:5173/sso-login"
+    VITE_USE_COGNITO_SCOPE: "openid profile email"
+    VITE_API_URL: "https://cmi7hm0pqa.execute-api.us-east-1.amazonaws.com/v1"
+    VITE_KPI_API_URL: "http://sales-copilot-1616710771.us-east-"
+
+
+parameter-store:
+
+    VITE_ACCESS_KEY: "/VITE_ACCESS_KEY"
+    VITE_SECRET_KEY: "/VITE_SECRET_KEY"
+    VITE_USE_COGNITO_CLIENT_SECRET: "/VITE_USE_COGNITO_CLIENT_SECRET"
+
 
 phases:
   install:
-    runtime-versions:
-      nodejs: 10
     commands:
       - echo "=== INSTALL PHASE ==="
       - pwd
-
+      
       - |
           if ! command -v aws &> /dev/null; then
             curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
             unzip awscliv2.zip
             ./aws/install
           fi
+
 
       - node --version
       - npm --version
@@ -34,8 +50,23 @@ phases:
   pre_build:
     commands:
       - cd UI
-      - npm ci
-      - npm audit --production || true
+      - touch .env
+      # export the env variables
+      - echo VITE_SALES_PRE_CALL_ENDPOINT=${VITE_SALES_PRE_CALL_ENDPOINT} >> .env
+      - echo VITE_SALES_POST_CALL_ENDPOINT=${VITE_SALES_POST_CALL_ENDPOINT} >> .env
+      - echo VITE_API_BASE_URL=${VITE_API_BASE_URL} >> .env
+      - echo VITE_USE_COGNITO_DOMAIN=${VITE_USE_COGNITO_DOMAIN} >> .env
+      - echo VITE_USE_COGNITO_CLIENT_ID=${VITE_USE_COGNITO_CLIENT_ID} >> .env
+      - echo VITE_USE_COGNITO_REDIRECT_URI=${VITE_USE_COGNITO_REDIRECT_URI} >> .env
+      - echo VITE_USE_COGNITO_SCOPE=${VITE_USE_COGNITO_SCOPE} >> .env
+      - echo VITE_API_URL=${VITE_API_URL} >> .env
+      - echo VITE_KPI_API_URL=${VITE_KPI_API_URL} >> .env
+      - echo VITE_ACCESS_KEY=${VITE_ACCESS_KEY} >> .env
+      - echo VITE_SECRET_KEY=${VITE_SECRET_KEY} >> .env  
+      - echo VITE_USE_COGNITO_CLIENT_SECRET=${VITE_USE_COGNITO_CLIENT_SECRET} >> .env                
+
+      - rm -rf node_modules package-lock.json
+      - npm install
 
   build:
     commands:

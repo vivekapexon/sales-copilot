@@ -1,0 +1,102 @@
+version: 0.2
+
+env:
+  variables:
+    EC2_HOST: "34.228.157.60"
+    EC2_USER: "ubuntu"
+    APP_DIR: "/home/ubuntu/fastapi-app"
+    SSH_KEY_SECRET: "/fastapi-ssh-key"
+
+
+phases:
+  install:
+    commands:
+      - echo "=== INSTALL PHASE ==="
+      - pwd
+     # Install system dependencies
+      - apt update
+      - apt install openssh-client jq tar gzip
+
+      - |
+          if ! command -v aws &> /dev/null; then
+            curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+            unzip awscliv2.zip
+            ./aws/install --update
+          fi
+
+      - python --version
+      - aws --version
+
+  pre_build:
+    commands:
+      - echo "Fetching SSH key"
+
+      - |
+          aws ssm get-parameter \
+            --name $SSH_KEY_SECRET \
+            --with-decryption \
+            --output text > fastapi-key.pem
+      
+      - chmod 600 fastapi-key.pem
+
+  build:
+    commands:
+      - echo "Removing old application"
+      - |
+        ssh -o StrictHostKeyChecking=no \
+        -i fastapi-key.pem \
+        $EC2_USER@$EC2_HOST << 'EOF'
+          sudo systemctl stop fastapi || true
+
+          rm -rf $APP_DIR          
+
+        EOF
+
+
+      - echo "Copying files to EC2"
+      - |
+        scp -o StrictHostKeyChecking=no \
+        -i fastapi-key.pem \
+        -r KPI-API/* \
+        $EC2_USER@$EC2_HOST:$APP_DIR/
+
+      # Create systemd service file
+      - |
+        cat > $DEPLOY_DIR/$APP_NAME.service << EOF
+        [Unit]
+        Description=FastAPI App
+        After=network.target
+
+        [Service]
+        User=ec2-user
+        WorkingDirectory=/home/ubuntu/fastapi-app
+        ExecStart=/usr/local/bin/gunicorn app.main:app \
+            -k uvicorn.workers.UvicornWorker \
+            --bind 0.0.0.0:8000
+        Restart=always
+
+        [Install]
+        WantedBy=multi-user.target
+        EOF
+
+
+      - echo "Installing deps and restarting service"
+      - |
+        ssh -o StrictHostKeyChecking=no \
+        -i fastapi-key.pem \
+        $EC2_USER@$EC2_HOST << 'EOF'
+          cd $APP_DIR
+          python3 -m venv KPI-API
+          source KPI-API/bin/activate
+
+          pip3 install -r requirements.txt
+
+          sudo systemctl stop fastapi || true
+          sudo systemctl start fastapi
+        EOF
+
+
+artifacts:
+  files:
+    - '**/*'
+  base-directory: $BUILD_OUTPUT_DIR

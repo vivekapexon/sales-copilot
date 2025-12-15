@@ -155,7 +155,7 @@ phases:
       
       # Upload to S3
       - S3_KEY="$S3_KEY_PREFIX/$APP_NAME/$CODEBUILD_BUILD_ID.zip"
-      - echo "Uploading to S3: s3://$S3_BUCKET/$S3_KEY"
+      - echo "Uploading to S3:.."
       - aws s3 cp deployment.zip s3://$S3_BUCKET/$S3_KEY
 
       # Save deployment metadata

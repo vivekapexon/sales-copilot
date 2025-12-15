@@ -107,7 +107,7 @@ Comprehensive HCP and territory intelligence data supporting AI-powered field sa
 
 **Required Filters**:
 - `exclusion_list_flag = false` (only include active HCPs)
-- `as_of_date = (SELECT MAX(as_of_date) FROM public.healthcare_data)` (latest data)
+
 
 **Data Source**: public.healthcare_data
 
@@ -132,7 +132,6 @@ Comprehensive HCP and territory intelligence data supporting AI-powered field sa
    - Territory filter if specified
    - Drive time constraints (e.g., drive_time_minutes <= 45)
    - Exclusion list filter
-   - Latest data filter
 
 **Scoring Breakdown**:
 - **Potential Uplift (30 points max)**: Revenue opportunity based on growth potential (0-1.5 scale)
@@ -231,7 +230,6 @@ END
 
 ```sql
 WHERE exclusion_list_flag = false
-    AND as_of_date = (SELECT MAX(as_of_date) FROM public.healthcare_data)
     AND feature_completeness_pct > 0.7
     AND prescribing_freshness_days < 14
 ```

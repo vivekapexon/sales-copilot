@@ -1,14 +1,36 @@
 # main.py
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
+import os
 from typing import Any, Dict, Optional
 from utils import execute_redshift_sql
 from KPI.queries import kpi_overview_sql
 import logging
-
+load_dotenv()
+cors_origins_env = os.getenv("CORS_ALLOW_ORIGINS", "")
+ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in cors_origins_env.split(",")
+    if origin.strip()
+]
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("hcp_kpi_api")
 
 app = FastAPI(title="HCP KPI API (Production)", version="1.0")
+
+if ALLOWED_ORIGINS:
+    logger.info("CORS enabled for origins: %s", ALLOWED_ORIGINS)
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=ALLOWED_ORIGINS,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+else:
+    logger.warning("CORS_ALLOW_ORIGINS is empty. No CORS origins allowed.")
 
 
 def safe_number(v: Any) -> Optional[float]:

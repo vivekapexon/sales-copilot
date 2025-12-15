@@ -5,7 +5,7 @@ env:
     EC2_HOST: "34.228.157.60"
     EC2_USER: "ubuntu"
     APP_DIR: "/home/ubuntu/fastapi-app"
-    SSH_KEY_SECRET: "fastapi-ssh-key"
+    SSH_KEY_SECRET: "/fastapi-ssh-key"
 
 
 phases:
@@ -30,9 +30,9 @@ phases:
   pre_build:
     commands:
       - echo "Fetching SSH key"
-      - aws secretsmanager get-secret-value \
-          --secret-id $SSH_KEY_SECRET \
-          --query SecretString \
+      - aws ssm get-parameter \
+          --name $SSH_KEY_SECRET \
+          --with-decryption \
           --output text > fastapi-key.pem
       - chmod 600 fastapi-key.pem
 

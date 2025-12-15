@@ -1,12 +1,16 @@
 {
-  "name": "sample-static-node-app",
+  "name": "sample-static-node-site",
   "version": "1.0.0",
-  "description": "A sample static website for CI/CD testing",
-  "main": "server.js",
+  "description": "A sample static website to test a CI/CD pipeline",
+  "main": "index.js",
   "scripts": {
-    "start": "node server.js",
-    "test": "echo \"No tests specified\" && exit 0"
+    "start": "npx http-server public/",
+    "test": "echo 'No tests defined for this basic sample'",
+    "build": "echo 'Build step complete. Files are ready in public directory.'"
   },
   "author": "",
-  "license": "ISC"
+  "license": "ISC",
+  "devDependencies": {
+    "http-server": "^14.1.1"
+  }
 }

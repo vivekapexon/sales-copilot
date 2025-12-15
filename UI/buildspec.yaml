@@ -19,8 +19,8 @@ phases:
     commands:
       - echo "=== INSTALL PHASE ==="
       - pwd
-      - yum update -y
-      - yum install -y git jq tar gzip
+      - apt-get update -y
+      - apt-get install -y git jq tar gzip
 
       - |
           if ! command -v aws &> /dev/null; then

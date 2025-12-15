@@ -38,6 +38,7 @@ phases:
 
   build:
     commands:
+      - cd UI
       - npm run build
       - |
           echo "Build ID: $CODEBUILD_BUILD_ID" > $BUILD_OUTPUT_DIR/build-info.txt

@@ -1,0 +1,12 @@
+{
+  "name": "sample-static-node-app",
+  "version": "1.0.0",
+  "description": "A sample static website for CI/CD testing",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "echo \"No tests specified\" && exit 0"
+  },
+  "author": "",
+  "license": "ISC"
+}

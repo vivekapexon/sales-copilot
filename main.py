@@ -62,11 +62,11 @@ def health():
 
 
 @app.get("/kpi/overview")
-def kpi_overview(user_id: str = Query(..., description="User id (e.g. 101) used to scope user-level KPIs")):
+def kpi_overview(user_id: str = Query(..., description="username, (e.g. vivek.kumar) used to scope user-level KPIs")):
     if not user_id:
         raise HTTPException(status_code=400, detail="user_id is required")
-
-    sql = kpi_overview_sql(user_id)
+    username=user_id.lower()
+    sql = kpi_overview_sql(username)
     resp = execute_redshift_sql(sql)
 
     if resp.get("status") != "finished":

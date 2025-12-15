@@ -7,8 +7,8 @@ def escape(val: str) -> str:
     return val.replace("'", "''") if val else val
 
 
-def kpi_overview_sql(user_id: str) -> str:
-    uid = escape(user_id)
+def kpi_overview_sql(username: str) -> str:
+    uid = escape(username)
 
     return f"""
     WITH

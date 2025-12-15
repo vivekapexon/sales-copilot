@@ -30,10 +30,13 @@ phases:
   pre_build:
     commands:
       - echo "Fetching SSH key"
-      - aws ssm get-parameter \
-          --name $SSH_KEY_SECRET \
-          --with-decryption \
-          --output text > fastapi-key.pem
+
+      - |
+          aws ssm get-parameter \
+            --name $SSH_KEY_SECRET \
+            --with-decryption \
+            --output text > fastapi-key.pem
+      
       - chmod 600 fastapi-key.pem
 
   build:

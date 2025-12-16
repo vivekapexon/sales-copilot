@@ -10,6 +10,8 @@ actions, and sentiment analysis.
 import json
 import uuid
 import boto3
+import time
+from enum import Enum
 from strands import Agent, tool
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
 
@@ -490,38 +492,45 @@ def create_supervisor_agent() -> Agent:
 agent = create_supervisor_agent()
 
 
-# =============================================================================
-# Application Entrypoint
-# =============================================================================
-
 @app.entrypoint
-def run_supervisor_agent(payload: dict = None) -> dict:
-    """
-    Execute the supervisor agent with the provided prompt.
-    
-    Processes user natural language queries and orchestrates appropriate 
-    agent calls based on intent classification. This is the main entry point 
-    for the application.
+async def invoke(payload: dict = {}):
+    prompt = payload.get("prompt", "")
 
-    Args:
-        payload (dict, optional): Input payload containing the user prompt.
-                                 Defaults to a sample query if not provided.
+    try:
+        stream = agent.stream_async(prompt)
+        async for chunk in stream:
+            # Debug: log chunk type and attributes
+            print(f"📦 Chunk type: {type(chunk).__name__}")
+            print(
+                f"📦 Chunk attributes: {dir(chunk) if hasattr(chunk, '__dict__') else 'N/A'}"
+            )
 
-    Returns:
-        dict: The supervisor agent's response including agent outputs and 
-              formatted results.
-    """
-    if payload is None:
-        payload = {}
-    
-    # Extract prompt from payload with a sensible default
-    user_prompt = payload.get("prompt", "Give me the details of HCP1001 from my last call")
-    
-    # Invoke the agent with user prompt
-    agent_result = agent(user_prompt)
-    
-    return agent_result
+            # Try different ways to extract text
+            text = None
+            if hasattr(chunk, "data"):
+                text = chunk.data
+            elif hasattr(chunk, "delta"):
+                if hasattr(chunk.delta, "text"):
+                    text = chunk.delta.text
+                elif isinstance(chunk.delta, dict) and "text" in chunk.delta:
+                    text = chunk.delta["text"]
+            elif isinstance(chunk, str):
+                text = chunk
+            elif isinstance(chunk, dict) and "data" in chunk:
+                text = chunk["data"]
 
+            if text:
+                print(f"📤 Yielding: {text[:100]}...")
+                yield text
+            else:
+                print(f"⚠️  No text found in chunk: {chunk}")
+    except Exception as e:
+        print(f"❌ Streaming error: {e}")
+        import traceback
+
+        traceback.print_exc()
+        yield f"Error: {str(e)}"
+ 
 
 # =============================================================================
 # Main Entry Point

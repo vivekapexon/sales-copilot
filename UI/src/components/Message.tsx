@@ -121,25 +121,6 @@ export default function Messages({
               </SpaceBetween>
             </ChatBubble>
 
-            {/* {message.showFeedbackDialog && (
-              <div className="other-content-vertically-align">
-                <FeedbackDialog
-                  onDismiss={() => setShowFeedbackDialog(index, false)}
-                  onSubmit={() => {
-                    setShowFeedbackDialog(index, false);
-                    addMessage(index + 1, {
-                      type: "chat-bubble",
-                      authorId: "gen-ai",
-                      content:
-                        "Your feedback has been submitted. Thank you for your additional feedback.",
-                      timestamp: new Date().toLocaleTimeString(),
-                      hideAvatar: true,
-                    });
-                  }}
-                />
-              </div>
-            )} */}
-
             {latestMessage.type === "chat-bubble" &&
               latestMessage.supportPrompts &&
               index === messages.length - 1 && (

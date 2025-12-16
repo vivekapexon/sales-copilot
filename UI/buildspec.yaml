@@ -50,16 +50,19 @@ phases:
         VITE_USE_COGNITO_CLIENT_SECRET=$(aws ssm get-parameter \
             --name $USE_COGNITO_CLIENT_SECRET \
             --with-decryption \
+            --query "Parameter.Value" \
             --output text)        
       - |
         VITE_ACCESS_KEY=$(aws ssm get-parameter \
             --name $ACCESS_KEY \
             --with-decryption \
+            --query "Parameter.Value" \
             --output text)        
       - |
         VITE_SECRET_KEY=$(aws ssm get-parameter \
             --name $SECRET_KEY \
             --with-decryption \
+            --query "Parameter.Value" \
             --output text)        
 
       

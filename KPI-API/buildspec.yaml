@@ -59,14 +59,14 @@ phases:
         set -e
         
         # Setup virtual environment
-        if [ ! -d "/home/ubuntu/KPI-API" ]; then
-          python3 -m venv /home/ubuntu/KPI-API
+        if [ ! -d "/home/ubuntu/KPI" ]; then
+          python3 -m venv /home/ubuntu/KPI
         fi
                 
 
         # Activate virtual environment
-        source /home/ubuntu/KPI-API/bin/activate
-        
+        source /home/ubuntu/KPI/bin/activate
+        cd /home/ubuntu/KPI-API
         # Install/upgrade dependencies
         pip install -r requirements.txt
         

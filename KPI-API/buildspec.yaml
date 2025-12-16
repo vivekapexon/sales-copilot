@@ -58,12 +58,8 @@ phases:
         #!/bin/bash
         set -e
         
-        # Setup virtual environment
-        if [ ! -d "/home/ubuntu/KPI" ]; then
-          python3 -m venv /home/ubuntu/KPI
-        fi
+        python3 -m venv /home/ubuntu/KPI
                 
-
         # Activate virtual environment
         source /home/ubuntu/KPI/bin/activate
         cd /home/ubuntu/KPI-API
@@ -93,8 +89,8 @@ phases:
         User=ubuntu
         Group=ubuntu
         WorkingDirectory=/home/ubuntu/$APP_NAME
-        Environment="PATH=/home/ubuntu/KPI/bin"
-        ExecStart=/home/ubuntu/$APP_NAME/start.sh
+        Environment="PATH=/home/ubuntu/KPI/bin::/usr/bin"
+        ExecStart=/home/ubuntu/start.sh
         Restart=always
         RestartSec=10
         StandardOutput=journal

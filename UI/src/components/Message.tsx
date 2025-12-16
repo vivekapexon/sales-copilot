@@ -100,9 +100,9 @@ export default function Messages({
                   {message.authorId?.toLowerCase() == "user" ? (
                     <>{message.content}</>
                   ) : (
-                    <Markdown
-                      remarkPlugins={[remarkGfm]}
-                    >{`${message.content}`}</Markdown>
+                    <Markdown remarkPlugins={[remarkGfm]}>{`${message.content
+                      ?.replaceAll("\\n", "\n")
+                      .replaceAll("##", "\n ##")}`}</Markdown>
                   )}
                 </div>
                 {message.files && message.files.length > 0 && (

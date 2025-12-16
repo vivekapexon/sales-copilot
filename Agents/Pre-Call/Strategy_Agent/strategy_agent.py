@@ -751,35 +751,43 @@ agent = create_strategy_agent()
 # =====================================================================
 
 @app.entrypoint
-def run_main_agent(payload: dict = {}):
-    """
-    Main entrypoint for the Strategy Agent application.
-    
-    This function receives user queries (either via API or direct invocation),
-    extracts the natural language query prompt, and delegates to the Strategy Agent
-    for intent classification and sub-agent orchestration.
+async def invoke(payload: dict = {}):
+    prompt = payload.get("prompt", "")
 
-    Args:
-        payload (dict, optional): Request payload containing the 'prompt' key
-                                 with the user's natural language query.
-                                 Defaults to an empty dictionary.
+    try:
+        stream = agent.stream_async(prompt)
+        async for chunk in stream:
+            # Debug: log chunk type and attributes
+            print(f"📦 Chunk type: {type(chunk).__name__}")
+            print(
+                f"📦 Chunk attributes: {dir(chunk) if hasattr(chunk, '__dict__') else 'N/A'}"
+            )
 
-    Returns:
-        Any: Response from the Strategy Agent containing classified intent results,
-             agent outputs, or error messages in JSON format.
+            # Try different ways to extract text
+            text = None
+            if hasattr(chunk, "data"):
+                text = chunk.data
+            elif hasattr(chunk, "delta"):
+                if hasattr(chunk.delta, "text"):
+                    text = chunk.delta.text
+                elif isinstance(chunk.delta, dict) and "text" in chunk.delta:
+                    text = chunk.delta["text"]
+            elif isinstance(chunk, str):
+                text = chunk
+            elif isinstance(chunk, dict) and "data" in chunk:
+                text = chunk["data"]
 
-    Example:
-        payload = {"prompt": "Prepare me for my call with Dr. Rao"}
-        result = run_main_agent(payload)
-    """
-    # Extract the natural language prompt from the payload
-    prompt = payload.get("prompt", "Give me the details of HCP1001")
-    
-    # Invoke the Strategy Agent with the extracted prompt
-    agent_result = agent(prompt)
-    
-    return agent_result
+            if text:
+                print(f"📤 Yielding: {text[:100]}...")
+                yield text
+            else:
+                print(f"⚠️  No text found in chunk: {chunk}")
+    except Exception as e:
+        print(f"❌ Streaming error: {e}")
+        import traceback
 
+        traceback.print_exc()
+        yield f"Error: {str(e)}"
 
 # =====================================================================
 # Local Development and Testing

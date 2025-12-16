@@ -22,6 +22,7 @@ from mcp.client.streamable_http import streamablehttp_client
 from opensearchpy import AWSV4SignerAuth 
 from opensearchpy import OpenSearch, RequestsHttpConnection
 import json
+from strands.tools.executors import SequentialToolExecutor
 
 # AWS Configuration
 AWS_REGION = "us-east-1"
@@ -400,7 +401,8 @@ def create_agent():
             - If retrieve_territory_context fails, proceed with basic schema knowledge
             - If execute_redshift_sql fails, return "Unable to fetch data, please try again"
         """,
-        tools=get_full_tools_list(mcp_client) + [retrieve_territory_context]
+        tools=get_full_tools_list(mcp_client) + [retrieve_territory_context],
+        tool_executor=SequentialToolExecutor()
     )
 
 

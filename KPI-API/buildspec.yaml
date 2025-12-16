@@ -5,7 +5,7 @@ env:
     # Required - set in CodeBuild project
     APP_NAME: "KPI-API"
     ENVIRONMENT: "production"
-    S3_BUCKET: "sales-copilot-bucket "
+    S3_BUCKET: "sales-copilot-bucket"
     S3_KEY_PREFIX: "KPI"
     SSH_KEY_SECRET: "fastapi-ssh-key"
     INSTANCE_ID: "i-0a61361574607b8f4"

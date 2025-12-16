@@ -14,10 +14,9 @@ env:
     VITE_SALES_PRE_CALL_ENDPOINT: "arn:aws:bedrock-agentcore:us-east-1:969385807621:runtime/sc_prc_strategy_agent-fzs6N05eqb"
     VITE_SALES_POST_CALL_ENDPOINT: "arn:aws:bedrock-agentcore:us-east-1:969385807621:runtime/sc_poc_supervisor_agent-M2IwWM48TC"
     VITE_API_BASE_URL: "https://cmi7hm0pqa.execute-api.us-east-1.amazonaws.com/v1"
-    #VITE_USE_COGNITO_DOMAIN: "https://salescopilot-agentcore-identity-pool-m3ozg.auth.us-east-1.amazoncognito.com"
-    VITE_USE_COGNITO_DOMAIN: "https://us-east-1ecly4bpnj.auth.us-east-1.amazoncognito.com"
-    #VITE_USE_COGNITO_CLIENT_ID: "4r1qou4d7s8637rg9odrkpf9sf"
-    VITE_USE_COGNITO_CLIENT_ID: "55urjl2hl1l6k0mt45cmgn7uhv"
+    VITE_USE_COGNITO_DOMAIN: "https://salescopilot-agentcore-identity-pool-m3ozg.auth.us-east-1.amazoncognito.com"
+    VITE_USE_COGNITO_CLIENT_ID: "4r1qou4d7s8637rg9odrkpf9sf"
+    
     VITE_USE_COGNITO_REDIRECT_URI: "https://d3shnqei5xandt.cloudfront.net/sso-login"
     VITE_USE_COGNITO_SCOPE: "openid profile email"
     VITE_API_URL: "https://cmi7hm0pqa.execute-api.us-east-1.amazonaws.com/v1"
@@ -67,7 +66,6 @@ phases:
             --query "Parameter.Value" \
             --output text)        
 
-      - VITE_USE_COGNITO_CLIENT_SECRET="13fiv0ab8lv7ccv558edvluda25tddvj72dc7jvs3844e9752kmf"
       - touch .env
       # export the env variables
       - echo VITE_SALES_PRE_CALL_ENDPOINT=${VITE_SALES_PRE_CALL_ENDPOINT} >> .env

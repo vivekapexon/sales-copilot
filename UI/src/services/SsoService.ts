@@ -22,6 +22,10 @@ export const exchangeCognitoToken = async (code: string): Promise<{ user: UserIn
   const clientSecret = import.meta.env.VITE_USE_COGNITO_CLIENT_SECRET;
 
   if (!clientId || !clientSecret) {
+    console.log('clientSecret',clientSecret);
+      console.log('clientId',clientId);
+      console.log('redirectUri',redirectUri);
+      console.log('domain',domain);
     console.log("Missing environment variables for Cognito configuration");
     return null;
   }

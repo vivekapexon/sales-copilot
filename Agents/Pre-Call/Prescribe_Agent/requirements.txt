@@ -1,0 +1,8 @@
+strands-agents==1.19.0
+strands-agents-tools==0.2.17
+bedrock-agentcore==1.1.1
+bedrock-agentcore-starter-toolkit==0.2.5
+opensearch-py==3.1.0
+boto3==1.42.9
+numpy==2.3.5
+pandas==2.3.3

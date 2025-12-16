@@ -3,6 +3,14 @@ __pycache__/
 *.py[codz]
 *$py.class
 
+
+#Yamlfiles/ and Dcokerfiles
+.Dockerfile/
+.bedrock_agentcore.yaml
+.dockerignore
+.bedrock_agentcore/
+
+
 # C extensions
 *.so
 

@@ -132,7 +132,7 @@ phases:
         
 
         # Install systemd service
-        sudo cp /home/ubuntu/$APP_NAME/$APP_NAME.service /etc/systemd/system/
+        sudo cp /home/ubuntu/$APP_NAME.service /etc/systemd/system/
         sudo systemctl daemon-reload
         sudo systemctl enable $APP_NAME.service
         

@@ -20,13 +20,9 @@ env:
     VITE_USE_COGNITO_SCOPE: "openid profile email"
     VITE_API_URL: "https://cmi7hm0pqa.execute-api.us-east-1.amazonaws.com/v1"
     VITE_KPI_API_URL: "http://sales-copilot-1616710771.us-east-"
-
-
-parameter-store:
-
-    VITE_ACCESS_KEY: "/VITE_ACCESS_KEY"
-    VITE_SECRET_KEY: "/VITE_SECRET_KEY"
-    VITE_USE_COGNITO_CLIENT_SECRET: "VITE_USE_COGNITO_CLIENT_SECRET"
+    ACCESS_KEY: "VITE_ACCESS_KEY"
+    SECRET_KEY: "VITE_SECRET_KEY"
+    USE_COGNITO_CLIENT_SECRET: "VITE_USE_COGNITO_CLIENT_SECRET"
 
 
 phases:
@@ -50,6 +46,23 @@ phases:
   pre_build:
     commands:
       - cd UI
+      - |
+        VITE_USE_COGNITO_CLIENT_SECRET=$(aws ssm get-parameter \
+            --name $USE_COGNITO_CLIENT_SECRET \
+            --with-decryption \
+            --output text)        
+      - |
+        VITE_ACCESS_KEY=$(aws ssm get-parameter \
+            --name $ACCESS_KEY \
+            --with-decryption \
+            --output text)        
+      - |
+        VITE_SECRET_KEY=$(aws ssm get-parameter \
+            --name $SECRET_KEY \
+            --with-decryption \
+            --output text)        
+
+      
       - touch .env
       # export the env variables
       - echo VITE_SALES_PRE_CALL_ENDPOINT=${VITE_SALES_PRE_CALL_ENDPOINT} >> .env

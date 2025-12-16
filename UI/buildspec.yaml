@@ -23,7 +23,7 @@ env:
     ACCESS_KEY: "VITE_ACCESS_KEY"
     SECRET_KEY: "VITE_SECRET_KEY"
     USE_COGNITO_CLIENT_SECRET: "VITE_USE_COGNITO_CLIENT_SECRET"
-
+#This is comment
 
 phases:
   install:

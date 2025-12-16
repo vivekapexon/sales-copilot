@@ -128,7 +128,7 @@ phases:
         # Copy new deployment
         cp -r /tmp/deployment/* /home/ubuntu/
         chown -R ubuntu:ubuntu /home/ubuntu/$APP_NAME
-        chmod +x /home/ubuntu/$APP_NAME/start.sh
+        chmod +x /home/ubuntu/start.sh
         
 
         # Install systemd service

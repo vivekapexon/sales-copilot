@@ -124,6 +124,9 @@ phases:
         
         # Remove old deployment
         rm -rf /home/ubuntu/$APP_NAME
+                
+        #create api folder - first time it may not existing
+        mkdir -p /home/ubuntu/$APP_NAME
         
         # Copy new deployment
         cp -r /tmp/deployment/* /home/ubuntu/$APP_NAME/

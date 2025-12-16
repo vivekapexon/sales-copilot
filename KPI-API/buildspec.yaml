@@ -36,7 +36,7 @@ phases:
       - aws secretsmanager get-secret-value \
           --secret-id $SSH_KEY_SECRET \
           --query SecretString \
-          --output text > fastapi-key.pem
+          --output text > fastapi-key.pem      
       - chmod 600 fastapi-key.pem
 
   build:

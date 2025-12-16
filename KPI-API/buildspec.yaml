@@ -5,7 +5,7 @@ env:
     # Required - set in CodeBuild project
     APP_NAME: "KPI-API"
     ENVIRONMENT: "production"
-    S3_BUCKET: "sales-copilot-bucket "
+    S3_BUCKET: "sales-copilot-bucket"
     S3_KEY_PREFIX: "KPI"
     SSH_KEY_SECRET: "fastapi-ssh-key"
     INSTANCE_ID: "i-0a61361574607b8f4"
@@ -33,10 +33,12 @@ phases:
   pre_build:
     commands:
       - echo "Fetching SSH key"
-      - aws secretsmanager get-secret-value \
-          --secret-id $SSH_KEY_SECRET \
-          --query SecretString \
-          --output text > fastapi-key.pem
+      - |
+        aws ssm get-parameter \
+            --name $SSH_KEY_SECRET \
+            --with-decryption \
+            --output text > fastapi-key.pem      
+
       - chmod 600 fastapi-key.pem
 
   build:
@@ -56,15 +58,11 @@ phases:
         #!/bin/bash
         set -e
         
-        # Setup virtual environment
-        if [ ! -d "/home/ubuntu/KPI" ]; then
-          python3 -m venv /home/ubuntu/KPI
-        fi
+        python3 -m venv /home/ubuntu/KPI
                 
-
         # Activate virtual environment
         source /home/ubuntu/KPI/bin/activate
-        
+        cd /home/ubuntu/KPI-API
         # Install/upgrade dependencies
         pip install -r requirements.txt
         
@@ -91,8 +89,8 @@ phases:
         User=ubuntu
         Group=ubuntu
         WorkingDirectory=/home/ubuntu/$APP_NAME
-        Environment="PATH=/home/ubuntu/KPI/bin"
-        ExecStart=/home/ubuntu/$APP_NAME/start.sh
+        Environment="PATH=/home/ubuntu/KPI/bin::/usr/bin"
+        ExecStart=/home/ubuntu/start.sh
         Restart=always
         RestartSec=10
         StandardOutput=journal
@@ -122,15 +120,15 @@ phases:
         
         # Remove old deployment
         rm -rf /home/ubuntu/$APP_NAME
-        
+
         # Copy new deployment
-        cp -r /tmp/deployment/* /home/ubuntu/$APP_NAME/
+        cp -r /tmp/deployment/* /home/ubuntu/
         chown -R ubuntu:ubuntu /home/ubuntu/$APP_NAME
-        chmod +x /home/ubuntu/$APP_NAME/start.sh
+        chmod +x /home/ubuntu/start.sh
         
 
         # Install systemd service
-        sudo cp /home/ubuntu/$APP_NAME/$APP_NAME.service /etc/systemd/system/
+        sudo cp /home/ubuntu/$APP_NAME.service /etc/systemd/system/
         sudo systemctl daemon-reload
         sudo systemctl enable $APP_NAME.service
         
@@ -176,7 +174,6 @@ phases:
   post_build:
     commands:
       - echo "=== POST-BUILD PHASE ==="
-      - source venv/bin/activate
 
       # Deploy to each EC2 instance using AWS Systems Manager (SSM)
       - |

@@ -197,6 +197,7 @@ const GenAIPage = ({ heading, setIsNewChat }: ChatPageProps) => {
         user?.username,
         (chunk) => {
           if (chunk.indexOf("[LOG]") > -1) {
+            console.log(chunk);
             logData += chunk + " \n";
             // setLogResponse((prev: any) => prev + chunk);
             setLogResponse((prev: any) => prev + logData);

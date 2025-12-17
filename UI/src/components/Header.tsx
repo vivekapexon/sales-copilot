@@ -31,7 +31,7 @@ const HeaderComponent = () => {
         {
           type: "menu-dropdown",
           text: user?.username,
-          description: "Administrator",
+          // description: "Administrator",
           iconName: "user-profile",
           items: [
             // { id: "profile", text: "Profile" },

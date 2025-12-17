@@ -5,14 +5,23 @@ import { useEffect, useRef, useState } from "react";
 import Container from "@cloudscape-design/components/container";
 import PromptInput from "@cloudscape-design/components/prompt-input";
 
-import { getInitialMessages, type Message } from "../../config";
+import {
+  getInitialMessages,
+  getLoadingMessage,
+  type Message,
+} from "../../config";
 
 import "../../chat.scss";
 import { useStore } from "../../store";
 import Header from "@cloudscape-design/components/header";
 import { ScrollableContainer } from "../../components/Common";
 import Messages from "../../components/Message";
-import { Button, SpaceBetween } from "@cloudscape-design/components";
+import {
+  Box,
+  Button,
+  ButtonGroup,
+  SpaceBetween,
+} from "@cloudscape-design/components";
 import { downloadPdf } from "../../api/downloadpdf";
 import { streamAgent } from "../../services/agentInvocationService";
 import {
@@ -23,6 +32,7 @@ import {
 import { generateSessionId } from "../../api/utils";
 import { useAuth } from "../../context/AuthContext";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import LogModal from "../../components/LogModal";
 
 interface ChatPageProps {
   heading: string;
@@ -54,6 +64,8 @@ const GenAIPage = ({ heading, setIsNewChat }: ChatPageProps) => {
   const navigate = useNavigate();
   const sessionIdParam = searchParams.get("session");
   const [sessionId, setSessionId] = useState<string>(sessionIdParam || "");
+  const [logResponse, setLogResponse] = useState<string>("");
+  const [showModal, setShowModal] = useState<boolean>(false);
 
   // const [files, setFiles] = useState<File[]>([]);
   const promptInputRef = useRef<HTMLTextAreaElement>(null);
@@ -100,7 +112,6 @@ const GenAIPage = ({ heading, setIsNewChat }: ChatPageProps) => {
       try {
         if (user && user.username) {
           const chat = await getChatDetails(sessionIdFromUrl, user?.username);
-          console.log(chat);
           if (chat?.messages) {
             setMessages(
               chat.messages.map((m: any) => ({
@@ -127,12 +138,13 @@ const GenAIPage = ({ heading, setIsNewChat }: ChatPageProps) => {
   let botMessageIndex = -1;
 
   let fullResponse = "";
+  let logData = "";
   const onPromptSend = async ({
     detail: { value },
   }: {
     detail: { value: string };
   }) => {
-    // setCurrentMessage(value);
+    setLogResponse("");
     let curSessionId = sessionId;
     if (!localStorage.getItem("sessionId")) {
       console.log("new session created");
@@ -141,7 +153,7 @@ const GenAIPage = ({ heading, setIsNewChat }: ChatPageProps) => {
       const obj = {
         session_id: curSessionId,
         agent_id: heading.replace("-", "").toLowerCase(),
-        title: value.length > 30 ? value.slice(0, 30) + "..." : value,
+        title: value.length > 20 ? value.slice(0, 20) + "..." : value,
         user_id: user?.username,
       };
       createChatSession(obj);
@@ -175,15 +187,7 @@ const GenAIPage = ({ heading, setIsNewChat }: ChatPageProps) => {
     setPrompt("");
     setMessages((prev) => {
       botMessageIndex = prev.length;
-      return [
-        ...prev,
-        {
-          type: "chat-bubble",
-          authorId: "gen-ai",
-          content: "",
-          timestamp: new Date().toLocaleTimeString(),
-        },
-      ];
+      return [...prev, getLoadingMessage()];
     });
     try {
       await streamAgent(
@@ -192,19 +196,26 @@ const GenAIPage = ({ heading, setIsNewChat }: ChatPageProps) => {
         curSessionId,
         user?.username,
         (chunk) => {
-          fullResponse += chunk;
-          setMessages((prev) => {
-            const updated = [...prev];
-            if (botMessageIndex >= 0 && botMessageIndex < updated.length) {
-              updated[botMessageIndex] = {
-                type: "chat-bubble",
-                authorId: "gen-ai",
-                content: fullResponse,
-                timestamp: new Date().toLocaleTimeString(),
-              };
-            }
-            return updated;
-          });
+          if (chunk.indexOf("[LOG]") > -1) {
+            logData += chunk + " \n";
+            // setLogResponse((prev: any) => prev + chunk);
+            setLogResponse((prev: any) => prev + logData);
+          } else {
+            fullResponse += chunk;
+
+            setMessages((prev) => {
+              const updated = [...prev];
+              if (botMessageIndex >= 0 && botMessageIndex < updated.length) {
+                updated[botMessageIndex] = {
+                  type: "chat-bubble",
+                  authorId: "gen-ai",
+                  content: fullResponse,
+                  timestamp: new Date().toLocaleTimeString(),
+                };
+              }
+              return updated;
+            });
+          }
         }
       );
       const msgObj = {
@@ -213,7 +224,6 @@ const GenAIPage = ({ heading, setIsNewChat }: ChatPageProps) => {
         user_id: user?.username,
         role: "assistant",
       };
-      console.log(msgObj);
       addChatToSession(msgObj);
       // saveMessage(currentRunId, fullResponse, "assistant");
     } catch (error) {
@@ -232,38 +242,6 @@ const GenAIPage = ({ heading, setIsNewChat }: ChatPageProps) => {
         return updated;
       });
     }
-
-    // await streamAgent(
-    //   "bioinformatics",
-    //   prompt,
-    //   "currentRunId",
-    //   user?.username,
-    //   async (chunk) => {
-    //     count += 1;
-    //     const newMessage: Message = {
-    //       type: "chat-bubble",
-    //       authorId: "gen-ai",
-    //       content: count + chunk.toString(),
-    //       timestamp: new Date().toLocaleTimeString(),
-    //     };
-    //     console.log(count);
-    //     // setMessages((prevMessages) => [...prevMessages, newMessage]);
-    //     setMessages((prevMessages) => {
-    //       prevMessages.splice(prevMessages.length - 1, 1, newMessage);
-    //       return prevMessages;
-    //     });
-    //     // await setMessages((prev) => {
-    //     //   if (prev.length === 0) return prev;
-    //     //   // console.log(prev[prev.length - 1].content + count.toString());
-    //     //   const updatedLast = {
-    //     //     ...prev[prev.length - 1],
-    //     //     content: count + chunk.toString(),
-    //     //   };
-
-    //     //   return [...prev.slice(0, -1), updatedLast];
-    //     // });
-    //   }
-    // );
   };
 
   const addMessage = (index: number, message: Message) => {
@@ -276,14 +254,16 @@ const GenAIPage = ({ heading, setIsNewChat }: ChatPageProps) => {
 
   const handleExport = () => {
     let markDownString = "";
-    messages.forEach((msg: any) => {
-      if (typeof msg.content === "string") {
-        markDownString += "**Q’s " + msg.content + "**\n";
-      } else if (
-        typeof msg.content === "object" &&
-        msg.content.props?.children?.props?.children
-      ) {
-        markDownString += msg.content.props.children.props.children + "\n";
+    messages.forEach((msg: any, index: number) => {
+      if (index != 0) {
+        if (typeof msg.content === "string") {
+          markDownString += "**Q’s " + msg.content + "** \n";
+        } else if (
+          typeof msg.content === "object" &&
+          msg.content.props?.children?.props?.children
+        ) {
+          markDownString += msg.content.props.children.props.children + "\n";
+        }
       }
     });
     downloadPdf(markDownString, heading + Date.now());
@@ -382,6 +362,23 @@ const GenAIPage = ({ heading, setIsNewChat }: ChatPageProps) => {
                 placeholder="Ask a question"
                 autoFocus
                 disableSecondaryActionsPaddings
+                secondaryActions={
+                  <Box padding={{ left: "xxs", top: "xs" }}>
+                    <ButtonGroup
+                      ariaLabel="Chat actions"
+                      onItemClick={() => setShowModal(true)}
+                      items={[
+                        {
+                          type: "icon-button",
+                          id: "copy",
+                          iconName: "transcript",
+                          text: "All Logs",
+                        },
+                      ]}
+                      variant="icon"
+                    />
+                  </Box>
+                }
               />
             </>
           }
@@ -395,6 +392,13 @@ const GenAIPage = ({ heading, setIsNewChat }: ChatPageProps) => {
           </ScrollableContainer>
         </Container>
       </>
+      {showModal && (
+        <LogModal
+          content={logResponse}
+          showModal={showModal}
+          setShowModal={setShowModal}
+        />
+      )}
     </Container>
   );
 };

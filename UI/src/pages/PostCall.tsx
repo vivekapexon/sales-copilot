@@ -97,10 +97,10 @@ const PostCall = () => {
                   {/* <Box variant="small">March 10, 2023</Box> */}
                   <Box variant="h2">Post-Call</Box>
                 </SpaceBetween>
-                This is a paragraph. Lorem ipsum dolor sit amet, consectetur
-                adipiscing elit. Ut luctus tempor dolor ac accumsan. This is a
-                paragraph. Lorem ipsum dolor sit amet, consectetur adipiscing
-                elit. Ut luctus tempor dolor ac accumsan.
+                Capture call outcomes effortlessly using voice-to-CRM
+                automation. The system transcribes your summary, structures
+                compliant notes, identifies follow-up tasks, and drafts approved
+                communications while tracking sentiment and relationship trends.
                 <Button onClick={handleNewChat}>Start Querying</Button>
               </SpaceBetween>
             </Container>

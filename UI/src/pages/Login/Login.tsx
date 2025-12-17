@@ -51,7 +51,7 @@ export default function Login() {
                 Authenticating...
               </span>
             ) : (
-              "Login with SSO"
+              "Login"
             )}
           </Button>
         </Box>

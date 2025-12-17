@@ -387,4 +387,10 @@ p, li, table,
   height: 100vh;
 }
 
+.modal-log pre{
+  max-width: 100%;
+  overflow-x: auto;        /* enable horizontal scroll */
+  white-space: pre-wrap;   /* wrap long lines */
+  word-break: break-word; /* break long words */
+}
 

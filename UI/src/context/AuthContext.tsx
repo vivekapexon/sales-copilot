@@ -42,10 +42,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     const scope = import.meta.env.VITE_USE_COGNITO_SCOPE;
 
     if (!domain || !clientId || !redirectUri || !scope) {
-      console.log("domain-auth", domain);
-      console.log("clientId-auth", clientId);
-      console.log("redirectUri-auth", redirectUri);
-      console.log("scope-auth", scope);
       console.log("Missing environment variables for Cognito configuration");
       setIsLoading(false);
       console.log(provider);
@@ -91,6 +87,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
     /** Set user info in localstorage */
     localStorage.removeItem("auth_user");
+    localStorage.clear();
+    sessionStorage.clear();
   };
 
   return (

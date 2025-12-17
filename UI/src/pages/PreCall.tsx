@@ -77,7 +77,7 @@ const PreCall = () => {
               <Box key={"s2"} padding={"n"}>
                 <StatCard
                   statData={{
-                    kpiName: "Total HCPs",
+                    kpiName: "Scheduled Calls",
                     score: kpiData?.scheduled_calls_next_7d,
                   }}
                   index={3}
@@ -99,10 +99,11 @@ const PreCall = () => {
                   {/* <Box variant="small">March 10, 2023</Box> */}
                   <Box variant="h2">Pre-Call</Box>
                 </SpaceBetween>
-                This is a paragraph. Lorem ipsum dolor sit amet, consectetur
-                adipiscing elit. Ut luctus tempor dolor ac accumsan. This is a
-                paragraph. Lorem ipsum dolor sit amet, consectetur adipiscing
-                elit. Ut luctus tempor dolor ac accumsan.
+                Prepare instantly with AI-driven insights that unify HCP
+                history, prescribing trends, access updates, and recent
+                engagements. The system delivers concise call briefs with clear
+                objectives, personalized talking points, and anticipated
+                objections—helping you enter every interaction fully prepared.
                 <Button onClick={handleNewChat}>Start Querying</Button>
               </SpaceBetween>
             </Container>

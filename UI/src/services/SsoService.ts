@@ -21,12 +21,7 @@ export const exchangeCognitoToken = async (code: string): Promise<{ user: UserIn
   const redirectUri = import.meta.env.VITE_USE_COGNITO_REDIRECT_URI;
   const clientSecret = import.meta.env.VITE_USE_COGNITO_CLIENT_SECRET;
 
-  console.log('clientSecret',clientSecret);
-      console.log('clientId',clientId);
-      console.log('redirectUri',redirectUri);
-      console.log('domain',domain);
   if (!clientId || !clientSecret) {
-    
     console.log("Missing environment variables for Cognito configuration");
     return null;
   }
@@ -50,7 +45,6 @@ export const exchangeCognitoToken = async (code: string): Promise<{ user: UserIn
   });
 
   const data = await response.json();
-  console.log(data);
 
   if (!response.ok || !data.access_token) {
     throw new Error(data.error_description || "Token exchange failed");
@@ -64,7 +58,6 @@ export const exchangeCognitoToken = async (code: string): Promise<{ user: UserIn
   });
 
   const userInfo = await userInfoResp.json();
-  console.log(userInfo);
 
   if (!userInfoResp.ok) {
     throw new Error(userInfo.error_description || "Failed to fetch user info");

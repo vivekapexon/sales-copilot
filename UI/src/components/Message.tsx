@@ -97,12 +97,16 @@ export default function Messages({
                 <div
                   key={"" + message?.authorId + message?.timestamp + "content"}
                 >
-                  {message.authorId?.toLowerCase() == "user" ? (
-                    <>{message.content}</>
+                  {message.authorId?.toLowerCase() == "gen-ai" ? (
+                    message.avatarLoading == true ? (
+                      <>{message.content}</>
+                    ) : (
+                      <Markdown remarkPlugins={[remarkGfm]}>{`${message.content
+                        ?.replaceAll("\\n", "\n")
+                        .replaceAll("##", "\n ##")}`}</Markdown>
+                    )
                   ) : (
-                    <Markdown remarkPlugins={[remarkGfm]}>{`${message.content
-                      ?.replaceAll("\\n", "\n")
-                      .replaceAll("##", "\n ##")}`}</Markdown>
+                    <>{message.content}</>
                   )}
                 </div>
                 {message.files && message.files.length > 0 && (

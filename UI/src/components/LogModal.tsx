@@ -25,11 +25,19 @@ const LogModal = ({ content, showModal, setShowModal }: LogModalProps) => {
           </SpaceBetween>
         </Box>
       }
-      header="All Logs"
+      header={
+        <Box>
+          <SpaceBetween direction="horizontal" size="s">
+            <Box variant="h2">All Logs</Box>
+          </SpaceBetween>
+        </Box>
+      }
     >
-      <Markdown remarkPlugins={[remarkGfm]}>
-        {content && content.length ? content : "No Logs to Display"}
-      </Markdown>
+      <div className="modal-log">
+        <Markdown remarkPlugins={[remarkGfm]}>
+          {content && content.length ? content : "No Logs to Display"}
+        </Markdown>
+      </div>
     </Modal>
   );
 };

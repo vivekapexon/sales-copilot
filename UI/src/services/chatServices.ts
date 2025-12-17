@@ -21,10 +21,10 @@ export const listChatHistory = async(user_id: string, agent_id: string) => {
   }
   try {
     const url = `${baseUrl}/sessions?user_id=${user_id}&agent_id=${agent_id}`;
-    console.log('Fetching chat history:', { url, user_id, agent_id });
+    console.log('Fetching chat history:');
     const headers = await getAuthHeaders();
     const response = await axios.get(url, { headers });
-    console.log('Chat history response:', response.data);
+    console.log('Chat history response:');
     return response.data;
   } catch (error) {
     console.error('Failed to fetch chat history:', error);
@@ -48,10 +48,10 @@ export const createChatSession = async(data: any) => {
       agent_id: data.agent_id,
       title: data.title
     }
-    console.log('Creating chat session:', { url, payload });
+    console.log('Creating chat session:');
     const headers = await getAuthHeaders();
     const response = await axios.post(url, payload, { headers });
-    console.log('Create session response:', response.data);
+    console.log('Create session response:');
     return response.data;
   } catch (error) {
     console.error('Failed to create chat session:', error);

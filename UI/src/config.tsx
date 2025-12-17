@@ -322,10 +322,8 @@ export const AUTHORS: AuthorsType = {
 };
 
 const initialMsgs: Record<string, string> = {
-  "pre-call":
-    "Hello, please enter your query below to get the activities that need be done pre-call",
-  "post-call":
-    "Hello, please enter your query to get the activities that need be done post-call",
+  "pre-call": "Your pre-call co-pilot is ready—drop a query to begin.",
+  "post-call": "Type your recap and I’ll draft notes, tasks, and follow-ups.",
 };
 
 export const getInitialMessages = (

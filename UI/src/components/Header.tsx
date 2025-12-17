@@ -1,6 +1,15 @@
 import TopNavigation from "@cloudscape-design/components/top-navigation";
+import { useAuth } from "../context/AuthContext";
+import { useNavigate } from "react-router-dom";
 
 const HeaderComponent = () => {
+  const { user, signOut } = useAuth();
+  const navigate = useNavigate();
+
+  const logout = async () => {
+    await signOut();
+    navigate("/login");
+  };
   return (
     <TopNavigation
       identity={{
@@ -21,16 +30,16 @@ const HeaderComponent = () => {
         },
         {
           type: "menu-dropdown",
-          text: "User",
+          text: user?.username,
           description: "Administrator",
           iconName: "user-profile",
           items: [
             // { id: "profile", text: "Profile" },
             // { id: "settings", text: "Settings" },
-            // { id: "signout", text: "Sign out" }
+            { id: "signout", text: "Sign out" },
           ],
           onItemClick: (item) => {
-            if (item.detail.id === "signout") alert("Signing out…");
+            if (item.detail.id === "signout") logout();
           },
         },
       ]}

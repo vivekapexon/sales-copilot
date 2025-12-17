@@ -34,13 +34,51 @@ The Lambda execution role needs permissions for:
 
 ## API Endpoints
 
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/sessions` | Create new chat session |
-| GET | `/sessions` | List user sessions |
-| GET | `/sessions/{id}` | Get session with messages |
-| POST | `/sessions/{id}/messages` | Add message to session |
+| Method | Path | Description | user_id Required |
+|--------|------|-------------|------------------|
+| POST | `/sessions` | Create new chat session | Yes (body) |
+| GET | `/sessions` | List user sessions | Yes (query param) |
+| GET | `/sessions/{id}` | Get session with messages | Yes (query param) |
+| POST | `/sessions/{id}/messages` | Add message to session | Yes (body) |
+| DELETE | `/sessions/{id}` |Delete chat session with cascade| Yes (query param) |
 
+### Examples
+
+#### Create Session
+```bash
+POST /sessions
+{
+  "user_id": "user123",
+  "session_id": "sess_456",
+  "agent_id": "agent_789",
+  "title": "Customer Support Chat"
+}
+```
+
+#### List Sessions
+```bash
+GET /sessions?user_id=user123&agent_id=agent_789
+```
+
+#### Get Session with Messages
+```bash
+GET /sessions/sess_456?user_id=user123
+```
+
+#### Add Message
+```bash
+POST /sessions/sess_456/messages
+{
+  "user_id": "user123",
+  "role": "user",
+  "content": "Hello, I need help with my order"
+}
+```
+
+#### Delete Session
+```bash
+DELETE /sessions/sess_456?user_id=user123
+```
 
 ## Deployment
 

@@ -99,10 +99,9 @@ const GenAIPage = ({ heading, setIsNewChat }: ChatPageProps) => {
 
   useEffect(() => {
     const sessionIdFromUrl = searchParams.get("session");
+    setMessages([]);
 
     if (!sessionIdFromUrl) return;
-
-    setMessages([]);
 
     setSessionId(sessionIdFromUrl);
     localStorage.setItem("sessionId", sessionIdFromUrl);
@@ -153,7 +152,7 @@ const GenAIPage = ({ heading, setIsNewChat }: ChatPageProps) => {
       const obj = {
         session_id: curSessionId,
         agent_id: heading.replace("-", "").toLowerCase(),
-        title: value.length > 20 ? value.slice(0, 20) + "..." : value,
+        title: value.length > 25 ? value.slice(0, 25) + "..." : value,
         user_id: user?.username,
       };
       createChatSession(obj);
@@ -200,10 +199,9 @@ const GenAIPage = ({ heading, setIsNewChat }: ChatPageProps) => {
             console.log(chunk);
             logData += chunk + " \n";
             // setLogResponse((prev: any) => prev + chunk);
-            setLogResponse((prev: any) => prev + logData);
+            setLogResponse(logData);
           } else {
             fullResponse += chunk;
-
             setMessages((prev) => {
               const updated = [...prev];
               if (botMessageIndex >= 0 && botMessageIndex < updated.length) {
@@ -277,7 +275,9 @@ const GenAIPage = ({ heading, setIsNewChat }: ChatPageProps) => {
         <Header
           actions={
             <SpaceBetween direction="horizontal" size="xs">
-              <Button onClick={handleExport}>Download Chat</Button>
+              <Button onClick={handleExport} disabled={messages.length < 2}>
+                Download Chat
+              </Button>
               <Button
                 iconName="arrow-left"
                 onClick={() => {

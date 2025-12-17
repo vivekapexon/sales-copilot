@@ -10,25 +10,28 @@ import type { AppLayoutProps } from "@cloudscape-design/components/app-layout";
 import {
   Box,
   BreadcrumbGroup,
+  Button,
+  ButtonDropdown,
+  Flashbar,
   List,
   SideNavigation,
   SpaceBetween,
+  TextFilter,
   type SideNavigationProps,
 } from "@cloudscape-design/components";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import HeaderComponent from "../components/Header";
 import { useStore } from "../store";
 import { useAuth } from "../context/AuthContext";
-import { ScrollableList } from "../components/Common";
-import { listChatHistory } from "../services/chatServices";
+import { deleteChatSession, listChatHistory } from "../services/chatServices";
 
 const MainLayout = forwardRef<AppLayoutProps.Ref, AppLayoutProps>(
   function CustomAppLayout(props, ref) {
     const navigate = useNavigate();
     const { state, actions, appLayoutRef } = useStore();
     const { chatHistoryList, setChatHistoryList } = useAuth();
-    const [filterText] = useState("");
-    const { user } = useAuth();
+    const [filterText, setFilterText] = useState("");
+    const { user, setFlashItems, flashItems } = useAuth();
     const filteredChatHistory = chatHistoryList.filter((item) =>
       item.title.toLowerCase().includes(filterText.toLowerCase())
     );
@@ -62,6 +65,10 @@ const MainLayout = forwardRef<AppLayoutProps.Ref, AppLayoutProps>(
     }, [state.notifications]);
 
     useEffect(() => {
+      getChatHistoryList();
+    }, [selectedModule]);
+
+    const getChatHistoryList = () => {
       const module = selectedModule?.text
         .split(" ")[0]
         .replace("-", "")
@@ -71,11 +78,67 @@ const MainLayout = forwardRef<AppLayoutProps.Ref, AppLayoutProps>(
       response.then((res) => {
         setChatHistoryList(res.sessions);
       });
-    }, [selectedModule]);
+    };
+
+    const handleNewChat = () => {
+      const module = selectedModule?.text.split(" ")[0];
+
+      if (module.toLowerCase() == "pre-call") {
+        navigate("/?new-chat=true", { replace: true });
+      } else if (module.toLowerCase() == "post-call") {
+        navigate("/post-call?new-chat=true", { replace: true });
+      }
+    };
+
+    const deleteSession = (item: any) => {
+      deleteChatSession(item.session_id, item.user_id).then(
+        (res: any) => {
+          console.log(res);
+          if (res.success || res.ok) {
+            setFlashItems([
+              {
+                type: "success",
+                content: "History session has been deleted successfully.",
+                dismissible: true,
+                dismissLabel: "Dismiss message",
+                onDismiss: () => setFlashItems([]),
+                id: "message_1",
+              },
+            ]);
+            getChatHistoryList();
+          } else {
+            setFlashItems([
+              {
+                type: "error",
+                content: "Unable to delete history please try again sometime.",
+                dismissible: true,
+                dismissLabel: "Dismiss message",
+                onDismiss: () => setFlashItems([]),
+                id: "message_1",
+              },
+            ]);
+          }
+        },
+        () => {
+          setFlashItems([
+            {
+              type: "error",
+              content:
+                "Unable to connect to resource please try again sometime.",
+              dismissible: true,
+              dismissLabel: "Dismiss message",
+              onDismiss: () => setFlashItems([]),
+              id: "message_1",
+            },
+          ]);
+        }
+      );
+    };
 
     return (
       <I18nProvider locale="en" messages={[enMessages]}>
         <HeaderComponent />
+        <Flashbar items={flashItems} />
         <AppLayoutToolbar
           ref={appLayoutRef}
           {...props}
@@ -93,20 +156,30 @@ const MainLayout = forwardRef<AppLayoutProps.Ref, AppLayoutProps>(
                 }}
               />
               <hr
-                className="awsui_divider_l0dv0_1u5ju_232 awsui_divider-header_l0dv0_1u5ju_232"
+                className="awsui_divider_l0dv0_1u5ju_232"
                 role="presentation"
               />
-              <Box padding={"s"}>
-                <Box variant="h3">Chat History</Box>
+              <Box padding={"xs"}>
                 <SpaceBetween size="s">
-                  {/* <TextFilter
-                    filteringText={filterText}
-                    filteringPlaceholder="Search chats"
-                    onChange={({ detail }) =>
-                      setFilterText(detail.filteringText)
-                    }
-                  /> */}
-                  <ScrollableList>
+                  <Button
+                    ariaLabel="New Chat"
+                    fullWidth
+                    iconName="gen-ai"
+                    onClick={handleNewChat}
+                  >
+                    New Chat
+                  </Button>
+                  <Box variant="h3">Chat History</Box>
+                  <SpaceBetween size="s">
+                    <TextFilter
+                      filteringText={filterText}
+                      filteringPlaceholder="Search chats"
+                      onChange={({ detail }) =>
+                        setFilterText(detail.filteringText)
+                      }
+                    />
+
+                    {/* <ScrollableList> */}
                     <List
                       ariaLabel="List with icons and actions"
                       items={filteredChatHistory}
@@ -123,9 +196,18 @@ const MainLayout = forwardRef<AppLayoutProps.Ref, AppLayoutProps>(
                             {item.title}
                           </NavLink>
                         ),
+                        actions: (
+                          <ButtonDropdown
+                            items={[{ id: "1", text: "Delete" }]}
+                            variant="icon"
+                            ariaLabel={`Actions for ${item.content}`}
+                            onItemClick={() => deleteSession(item)}
+                          />
+                        ),
                       })}
                     />
-                  </ScrollableList>
+                    {/* </ScrollableList> */}
+                  </SpaceBetween>
                 </SpaceBetween>
               </Box>
             </>

@@ -1,5 +1,6 @@
 import React from "react";
 import type { User } from "../models";
+import type { FlashbarProps } from "@cloudscape-design/components/flashbar";
 
 interface AuthContextType {
   user: User | null;
@@ -8,10 +9,12 @@ interface AuthContextType {
   setIsLoading: React.Dispatch<React.SetStateAction<boolean>>;
   chatHistoryList: any[];
   error: string | null;
+  flashItems: FlashbarProps.MessageDefinition[];
   setError: React.Dispatch<React.SetStateAction<string | null>>;
   signInWithSSO: (provider: string) => void;
   signInWithPassword: (username: string, password: string) => Promise<void>;
   signOut: () => void;
+  setFlashItems: (items: FlashbarProps.MessageDefinition[]) => void;
   setChatHistoryList: (list: any[]) => void;
 }
 
@@ -24,6 +27,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const [isLoading, setIsLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [chatHistoryList, setChatHistoryList] = React.useState<any[]>([]);
+  const [flashItems, setFlashItems] = React.useState<
+    FlashbarProps.MessageDefinition[]
+  >([]);
 
   React.useEffect(() => {
     // Check for existing session
@@ -100,10 +106,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         setIsLoading,
         chatHistoryList,
         error,
+        flashItems,
         setError,
         signInWithSSO,
         signInWithPassword,
         signOut,
+        setFlashItems,
         setChatHistoryList,
       }}
     >

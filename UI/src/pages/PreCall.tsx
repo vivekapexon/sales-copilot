@@ -32,6 +32,7 @@ const PreCall = () => {
 
   useEffect(() => {
     if (sessionIdFromUrl) setIsNewChat(true);
+    else if (searchParams.get("new-chat") == "true") handleNewChat();
   }, [searchParams]);
 
   useEffect(() => {

@@ -10,6 +10,8 @@ actions, and sentiment analysis.
 import json
 import uuid
 import boto3
+import time
+from enum import Enum
 from strands import Agent, tool
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
 
@@ -283,12 +285,19 @@ def action_agent_tool(intent: str) -> dict:
     
     Extracts action items, commitments, and next steps from call data.
     Generates structured action item lists with priorities and timelines.
+    Creates session-specific requests to the Action Agent for isolated execution.
 
     Args:
         intent (str): Natural language prompt describing the action extraction request.
+                     Should contain call context, HCP information, and specific requirements.
 
     Returns:
-        dict: Agent response containing action items and metadata, or error details.
+        dict: Agent response containing:
+              - action_items_json: Structured list of action items
+              - priority: Priority levels for each action
+              - calendar_block_minutes: Recommended time blocks for follow-up
+              - primary_action_type: Categorization of action type
+              Or error details in case of failure.
     """
     session_id = f"nl-{uuid.uuid4().hex}{uuid.uuid4().hex[:8]}"
     payload = json.dumps({"prompt": intent, "session_id": session_id})
@@ -316,13 +325,21 @@ def sentiment_agent_tool(intent: str) -> dict:
     Invoke the Sentiment Agent via Bedrock Agent Runtime.
     
     Analyzes call sentiment, tone, receptivity, relationship stage, and risk levels.
-    Provides quantified metrics for call quality and HCP engagement.
+    Provides quantified metrics for call quality and HCP engagement based on
+    call transcription and conversation patterns.
 
     Args:
         intent (str): Natural language prompt describing the sentiment analysis request.
+                     Should reference the call transcript and analysis requirements.
 
     Returns:
-        dict: Agent response containing sentiment metrics and insights, or error details.
+        dict: Agent response containing:
+              - call_sentiment_score: Quantified sentiment metric (typically 0-100)
+              - relationship_stage: Current relationship phase with HCP
+              - next_call_risk_level: Risk assessment for follow-up call
+              - objection_intensity: Strength of objections raised
+              - positive_negative_ratio: Balance of positive vs negative sentiment
+              Or error details in case of failure.
     """
     session_id = f"nl-{uuid.uuid4().hex}{uuid.uuid4().hex[:8]}"
     payload = json.dumps({"prompt": intent, "session_id": session_id})
@@ -350,13 +367,21 @@ def structure_agent_tool(intent: str) -> dict:
     Invoke the Structure Agent via Bedrock Agent Runtime.
     
     Generates structured call notes with categorized objections, key topics, 
-    content shared, samples discussed, and compliance flags.
+    content shared, samples discussed, and compliance flags. Organizes raw
+    call data into actionable, searchable categories.
 
     Args:
         intent (str): Natural language prompt describing the structure extraction request.
+                     Should reference the call transcript and specific data to extract.
 
     Returns:
-        dict: Agent response containing structured call data, or error details.
+        dict: Agent response containing:
+              - objections: Categorized list of objections raised
+              - key_topics: Main discussion points and themes
+              - content_shared: Materials, resources, or content discussed
+              - samples_discussed: Product samples mentioned or provided
+              - compliance_flags: Regulatory or compliance concerns identified
+              Or error details in case of failure.
     """
     session_id = f"nl-{uuid.uuid4().hex}{uuid.uuid4().hex[:8]}"
     payload = json.dumps({"prompt": intent, "session_id": session_id})
@@ -384,13 +409,21 @@ def transcription_agent_tool(intent: str) -> dict:
     Invoke the Transcription Agent via Bedrock Agent Runtime.
     
     Retrieves and processes call transcriptions with metadata including 
-    call IDs, timestamps, and confidence scores.
+    call IDs, timestamps, and confidence scores. Acts as the foundational
+    data source for downstream agents requiring call content analysis.
 
     Args:
         intent (str): Natural language prompt describing the transcription request.
+                     Should specify which call to retrieve and any specific segments needed.
 
     Returns:
-        dict: Agent response containing transcript data and metadata, or error details.
+        dict: Agent response containing:
+              - transcript: Full text transcription of the call
+              - call_id: Unique identifier for the call
+              - timestamps: Speaker segments with timing information
+              - confidence_score: Quality/accuracy metric for transcription
+              - metadata: Additional call information (duration, participants, etc.)
+              Or insufficient_data flag if transcript unavailable.
     """
     session_id = f"nl-{uuid.uuid4().hex}{uuid.uuid4().hex[:8]}"
     payload = json.dumps({"prompt": intent, "session_id": session_id})
@@ -418,13 +451,20 @@ def compilance_agent_tool(intent: str) -> dict:
     Invoke the Compliance Agent via Bedrock Agent Runtime.
     
     Generates compliant follow-up emails and ensures communication adherence 
-    to regulatory guidelines. Can operate with or without transcript data.
+    to regulatory guidelines. Can operate with or without transcript data,
+    creating professional correspondence compliant with industry regulations.
 
     Args:
         intent (str): Natural language prompt describing the compliance email request.
+                     Should reference the call context, HCP information, and email content requirements.
 
     Returns:
-        dict: Agent response containing email draft and metadata, or error details.
+        dict: Agent response containing:
+              - followup_email_subject: Professional email subject line
+              - followup_email_body: Compliant email body text
+              - template_id: Reference to the compliance template used
+              - regulatory_notes: Any compliance considerations applied
+              Or error details in case of failure.
     """
     session_id = f"nl-{uuid.uuid4().hex}{uuid.uuid4().hex[:8]}"
     payload = json.dumps({"prompt": intent, "session_id": session_id})
@@ -454,8 +494,17 @@ def _tools_list() -> list:
     """
     Compile the complete list of available agent tools.
     
+    Assembles all callable agent tool functions into a single list
+    for registration with the supervisor agent. This ensures all
+    specialized agents are available for delegation.
+
     Returns:
-        list: Collection of all callable agent tool functions.
+        list: Collection of all callable agent tool functions:
+              - action_agent_tool
+              - sentiment_agent_tool
+              - structure_agent_tool
+              - transcription_agent_tool
+              - compilance_agent_tool
     """
     return [
         action_agent_tool,
@@ -476,9 +525,12 @@ def create_supervisor_agent() -> Agent:
     
     Initializes the supervisor agent with the system prompt and list of 
     available tools for intelligent delegation to specialized agents.
+    The supervisor uses the provided prompt to classify user intents
+    and invoke only necessary downstream agents.
 
     Returns:
-        Agent: Configured supervisor agent instance ready for inference.
+        Agent: Configured supervisor agent instance ready for inference
+               with system_prompt defining behavior and tools list for delegation.
     """
     return Agent(
         system_prompt=SUPERVISOR_AGENT_PROMPT,
@@ -494,33 +546,239 @@ agent = create_supervisor_agent()
 # Application Entrypoint
 # =============================================================================
 
-@app.entrypoint
-def run_supervisor_agent(payload: dict = None) -> dict:
+class ChunkType(Enum):
     """
-    Execute the supervisor agent with the provided prompt.
+    Enumeration defining types of data chunks streamed from the agent.
     
-    Processes user natural language queries and orchestrates appropriate 
-    agent calls based on intent classification. This is the main entry point 
-    for the application.
+    Attributes:
+        CONTENT (str): Represents actual response content from the agent.
+        LOG (str): Represents log/debug information about agent execution.
+    """
+    CONTENT = "content"
+    LOG = "log"
+
+
+def create_chunk(chunk_type: ChunkType, data: str):
+    """
+    Create a structured chunk for streaming responses.
+    
+    Formats data according to the chunk type for proper streaming
+    and client-side interpretation. Ensures consistent formatting
+    for both content and log messages.
 
     Args:
-        payload (dict, optional): Input payload containing the user prompt.
-                                 Defaults to a sample query if not provided.
+        chunk_type (ChunkType): Type of chunk (CONTENT or LOG).
+        data (str): The actual data/message to be chunked.
 
     Returns:
-        dict: The supervisor agent's response including agent outputs and 
-              formatted results.
+        str: Formatted chunk string ready for streaming.
+             - For CONTENT: returns data as-is
+             - For LOG: returns data prefixed with [LOG] identifier
     """
-    if payload is None:
-        payload = {}
+    if chunk_type == ChunkType.CONTENT:
+        return data
+    else:
+        return f"[LOG] {data}\n"
+
+
+@app.entrypoint
+async def invoke(payload: dict = {}):
+    """
+    Main entrypoint for agent invocation via Bedrock Agent Core.
     
-    # Extract prompt from payload with a sensible default
-    user_prompt = payload.get("prompt", "Give me the details of HCP1001 from my last call")
+    Processes incoming user prompts through the supervisor agent,
+    manages tool execution lifecycle, tracks metrics, and streams
+    responses with logging information. Handles both successful
+    agent operations and error conditions gracefully.
+
+    Args:
+        payload (dict, optional): Request payload containing:
+                                 - "prompt" (str): User's natural language query
+                                 Defaults to empty dict.
+
+    Yields:
+        str: Chunked response data containing:
+            - Agent content responses (markdown formatted)
+            - Log entries tracking tool execution and status
+            - Metrics and timing information
+
+    Processing Flow:
+        1. Extracts user prompt from payload
+        2. Initiates async agent stream with supervisor
+        3. Parses and logs tool invocations (start, input, completion)
+        4. Yields content chunks for streaming response
+        5. Tracks execution time and tool metrics
+        6. Handles exceptions with error logging
+    """
+    prompt = payload.get("prompt", "")
+    tool_calls = {}
+    start_time = time.time()
     
-    # Invoke the agent with user prompt
-    agent_result = agent(user_prompt)
+    yield create_chunk(ChunkType.LOG, "Agent started")
+
+    try:
+        stream = agent.stream_async(prompt)
+        
+        async for chunk in stream:
+            parsed_result = parse_chunk(chunk)
+            
+            if parsed_result["type"] == "content":
+                yield create_chunk(ChunkType.CONTENT, parsed_result["data"])
+            elif parsed_result["type"] == "tool_start":
+                tool_id = parsed_result["tool_id"]
+                tool_calls[tool_id] = {
+                    "name": parsed_result["tool_name"],
+                    "input": "",
+                    "start_time": time.time()
+                }
+                yield create_chunk(ChunkType.LOG, f"🔧 {parsed_result['tool_name']} starting...")
+            elif parsed_result["type"] == "tool_input":
+                tool_id = parsed_result["tool_id"]
+                if tool_id in tool_calls:
+                    tool_calls[tool_id]["input"] += parsed_result["input_part"]
+            elif parsed_result["type"] == "tool_complete":
+                tool_id = parsed_result["tool_id"]
+                if tool_id in tool_calls:
+                    tool_call = tool_calls[tool_id]
+                    duration = time.time() - tool_call["start_time"]
+                    yield create_chunk(ChunkType.LOG, f"✅ {tool_call['name']} completed")
+                    yield create_chunk(ChunkType.LOG, f"   Input: {tool_call['input']}")
+                    yield create_chunk(ChunkType.LOG, f"   Duration: {duration:.3f}s")
+            elif parsed_result["type"] == "tool_result":
+                result = parsed_result["result"]
+                yield create_chunk(ChunkType.LOG, f"   Result: {result}")
+            elif parsed_result["type"] == "metrics":
+                total_time = time.time() - start_time
+                metrics_summary = format_metrics(parsed_result["data"], len(tool_calls), total_time)
+                yield create_chunk(ChunkType.LOG, metrics_summary)
+                
+    except Exception as e:
+        yield create_chunk(ChunkType.LOG, f"❌ Error: {str(e)}")
+
+
+def format_metrics(metrics_data, tool_count, total_time):
+    """
+    Format execution metrics into human-readable output.
     
-    return agent_result
+    Aggregates tool execution statistics, token usage, and timing
+    information into a concise summary for logging and monitoring.
+    Provides insight into agent performance and resource consumption.
+
+    Args:
+        metrics_data (dict): Dictionary containing:
+                           - "usage" (dict): Token statistics with keys:
+                             - "totalTokens" (int)
+                             - "inputTokens" (int)
+                             - "outputTokens" (int)
+        tool_count (int): Number of tools/agents invoked in this execution.
+        total_time (float): Total execution duration in seconds.
+
+    Returns:
+        str: Multi-line formatted metrics string containing:
+            - Tool call count and success/error breakdown
+            - Approximate tool execution time
+            - Token usage statistics (input, output, total)
+            - Error status summary
+    """
+    lines = []
+    
+    if tool_count > 0:
+        lines.append(f"calls={tool_count}, success={tool_count}, errors=0")
+        lines.append(f"total tool time ~{total_time:.2f}s")
+    
+    if 'usage' in metrics_data:
+        usage = metrics_data['usage']
+        lines.append(f"Tokens: {usage.get('totalTokens', 0)} (in: {usage.get('inputTokens', 0)}, out: {usage.get('outputTokens', 0)})")
+    
+    lines.append("No errors encountered")
+    return "\n".join(lines)
+
+
+def parse_chunk(chunk):
+    """
+    Parse agent stream chunk into structured event data.
+    
+    Processes various chunk formats (dict, string, object) from the
+    agent stream and extracts relevant event information. Handles
+    content blocks, tool invocations, results, and metadata events.
+    Provides normalized output for downstream processing.
+
+    Args:
+        chunk: Raw chunk data from agent stream. Can be:
+               - dict: Event-based structure with 'event' or 'message' keys
+               - str: JSON-formatted data or free text
+               - object: Custom object with data/delta attributes
+
+    Returns:
+        dict: Structured parse result containing:
+              - "type" (str): Event type (content, tool_start, tool_input, 
+                             tool_complete, tool_result, metrics, unknown)
+              - Supporting fields depending on type:
+                - "data" (str): Content or message text
+                - "tool_id" (str): Identifier for tool invocation
+                - "tool_name" (str): Name of the tool being invoked
+                - "input_part" (str): Partial tool input data
+                - "result" (str): Tool execution result
+
+    Processing Logic:
+        1. Checks dict structure for event/message keys
+        2. Extracts contentBlockDelta for text/tool input
+        3. Identifies contentBlockStart for tool invocations
+        4. Captures contentBlockStop for completion events
+        5. Extracts metadata for metrics
+        6. Parses JSON strings for alternative format data
+        7. Falls back to string representation for unknown formats
+    """
+    # Handle dict chunks
+    if isinstance(chunk, dict):
+        if 'event' in chunk:
+            event = chunk['event']
+            if 'contentBlockDelta' in event:
+                delta = event['contentBlockDelta']['delta']
+                if 'text' in delta:
+                    return {"type": "content", "data": delta['text']}
+                elif 'toolUse' in delta:
+                    return {"type": "tool_input", "tool_id": "current", "input_part": delta['toolUse'].get('input', '')}
+            elif 'contentBlockStart' in event:
+                start = event['contentBlockStart']['start']
+                if 'toolUse' in start:
+                    tool_use = start['toolUse']
+                    return {
+                        "type": "tool_start",
+                        "tool_id": tool_use['toolUseId'],
+                        "tool_name": tool_use['name']
+                    }
+            elif 'contentBlockStop' in event:
+                return {"type": "tool_complete", "tool_id": "current"}
+            elif 'metadata' in event:
+                return {"type": "metrics", "data": event['metadata']}
+        elif 'message' in chunk and 'toolResult' in str(chunk):
+            # Extract tool results
+            content = chunk['message'].get('content', [])
+            for item in content:
+                if 'toolResult' in item:
+                    result_content = item['toolResult'].get('content', [])
+                    if result_content and 'text' in result_content[0]:
+                        return {"type": "tool_result", "result": result_content[0]['text']}
+    
+    # Handle string chunks with dict data
+    if isinstance(chunk, str) and chunk.startswith("{"):
+        try:
+            chunk_dict = eval(chunk)
+            if 'data' in chunk_dict and 'delta' in chunk_dict:
+                return {"type": "content", "data": chunk_dict['data']}
+            elif 'result' in chunk_dict:
+                result = chunk_dict['result']
+                if hasattr(result, 'metrics'):
+                    return {"type": "metrics", "data": result.metrics.accumulated_metrics}
+        except:
+            pass
+    
+    # Handle object chunks
+    if hasattr(chunk, 'data') and hasattr(chunk, 'delta'):
+        return {"type": "content", "data": chunk.data}
+    
+    return {"type": "unknown", "data": str(chunk)[:100]}
 
 
 # =============================================================================
@@ -533,5 +791,7 @@ if __name__ == "__main__":
     
     Initializes and runs the Bedrock Agent Core application server,
     making the supervisor agent available for request processing.
+    This entry point starts the async event loop and HTTP server
+    for handling incoming agent invocation requests.
     """
     app.run()

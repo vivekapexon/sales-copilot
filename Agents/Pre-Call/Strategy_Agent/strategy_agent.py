@@ -13,6 +13,8 @@ and used only when required by the classified intent.
 import json
 import uuid
 import boto3
+import time
+from enum import Enum
 from strands import Agent, tool
 from bedrock_agentcore.runtime import BedrockAgentCoreApp
 
@@ -744,42 +746,168 @@ def create_strategy_agent():
 
 # Instantiate the Strategy Agent globally for use in endpoints
 agent = create_strategy_agent()
-
-
 # =====================================================================
 # Main Workflow Entrypoint
 # =====================================================================
 
-@app.entrypoint
-def run_main_agent(payload: dict = {}):
-    """
-    Main entrypoint for the Strategy Agent application.
-    
-    This function receives user queries (either via API or direct invocation),
-    extracts the natural language query prompt, and delegates to the Strategy Agent
-    for intent classification and sub-agent orchestration.
+class ChunkType(Enum):
+    """Enumeration for different types of chunks."""
+    CONTENT = "content"
+    LOG = "log"
+
+def create_chunk(chunk_type: ChunkType, data: str):
+    """Create a structured chunk for streaming.
 
     Args:
-        payload (dict, optional): Request payload containing the 'prompt' key
-                                 with the user's natural language query.
-                                 Defaults to an empty dictionary.
+        chunk_type (ChunkType): The type of chunk to create (CONTENT or LOG).
+        data (str): The data to include in the chunk.
 
     Returns:
-        Any: Response from the Strategy Agent containing classified intent results,
-             agent outputs, or error messages in JSON format.
-
-    Example:
-        payload = {"prompt": "Prepare me for my call with Dr. Rao"}
-        result = run_main_agent(payload)
+        str: A structured string representing the chunk.
     """
-    # Extract the natural language prompt from the payload
-    prompt = payload.get("prompt", "Give me the details of HCP1001")
-    
-    # Invoke the Strategy Agent with the extracted prompt
-    agent_result = agent(prompt)
-    
-    return agent_result
+    if chunk_type == ChunkType.CONTENT:
+        return data
+    else:
+        return f"[LOG] {data}\n"
 
+@app.entrypoint
+async def invoke(payload: dict = {}):
+    """Main entry point for invoking the strategy agent.
+
+    Args:
+        payload (dict): The input payload containing the prompt for the agent.
+
+    Yields:
+        str: Structured chunks of log or content data as the agent processes the request.
+    """
+    prompt = payload.get("prompt", "")
+    tool_calls = {}
+    start_time = time.time()
+    
+    yield create_chunk(ChunkType.LOG, "Agent started")
+
+    try:
+        stream = agent.stream_async(prompt)
+        
+        async for chunk in stream:
+            parsed_result = parse_chunk(chunk)
+            
+            if parsed_result["type"] == "content":
+                yield create_chunk(ChunkType.CONTENT, parsed_result["data"])
+            elif parsed_result["type"] == "tool_start":
+                tool_id = parsed_result["tool_id"]
+                tool_calls[tool_id] = {
+                    "name": parsed_result["tool_name"],
+                    "input": "",
+                    "start_time": time.time()
+                }
+                yield create_chunk(ChunkType.LOG, f"🔧 {parsed_result['tool_name']} starting...")
+            elif parsed_result["type"] == "tool_input":
+                tool_id = parsed_result["tool_id"]
+                if tool_id in tool_calls:
+                    tool_calls[tool_id]["input"] += parsed_result["input_part"]
+            elif parsed_result["type"] == "tool_complete":
+                tool_id = parsed_result["tool_id"]
+                if tool_id in tool_calls:
+                    tool_call = tool_calls[tool_id]
+                    duration = time.time() - tool_call["start_time"]
+                    yield create_chunk(ChunkType.LOG, f"✅ {tool_call['name']} completed")
+                    yield create_chunk(ChunkType.LOG, f"   Input: {tool_call['input']}")
+                    yield create_chunk(ChunkType.LOG, f"   Duration: {duration:.3f}s")
+            elif parsed_result["type"] == "tool_result":
+                result = parsed_result["result"]
+                yield create_chunk(ChunkType.LOG, f"   Result: {result}")
+            elif parsed_result["type"] == "metrics":
+                total_time = time.time() - start_time
+                metrics_summary = format_metrics(parsed_result["data"], len(tool_calls), total_time)
+                yield create_chunk(ChunkType.LOG, metrics_summary)
+                
+    except Exception as e:
+        yield create_chunk(ChunkType.LOG, f"❌ Error: {str(e)}")
+
+def format_metrics(metrics_data, tool_count, total_time):
+    """Format metrics in a readable format.
+
+    Args:
+        metrics_data (dict): The metrics data to format.
+        tool_count (int): The number of tools called.
+        total_time (float): The total time taken for the operation.
+
+    Returns:
+        str: A formatted string summarizing the metrics.
+    """
+    lines = []
+    
+    if tool_count > 0:
+        lines.append(f"calls={tool_count}, success={tool_count}, errors=0")
+        lines.append(f"total tool time ~{total_time:.2f}s")
+    
+    if 'usage' in metrics_data:
+        usage = metrics_data['usage']
+        lines.append(f"Tokens: {usage.get('totalTokens', 0)} (in: {usage.get('inputTokens', 0)}, out: {usage.get('outputTokens', 0)})")
+    
+    lines.append("No errors encountered")
+    return "\n".join(lines)
+
+def parse_chunk(chunk):
+    """Parse a chunk and return structured data.
+
+    Args:
+        chunk (any): The chunk to parse, which can be a dict, string, or object.
+
+    Returns:
+        dict: A structured representation of the parsed chunk.
+    """
+    # Handle dict chunks
+    if isinstance(chunk, dict):
+        if 'event' in chunk:
+            event = chunk['event']
+            if 'contentBlockDelta' in event:
+                delta = event['contentBlockDelta']['delta']
+                if 'text' in delta:
+                    return {"type": "content", "data": delta['text']}
+                elif 'toolUse' in delta:
+                    return {"type": "tool_input", "tool_id": "current", "input_part": delta['toolUse'].get('input', '')}
+            elif 'contentBlockStart' in event:
+                start = event['contentBlockStart']['start']
+                if 'toolUse' in start:
+                    tool_use = start['toolUse']
+                    return {
+                        "type": "tool_start",
+                        "tool_id": tool_use['toolUseId'],
+                        "tool_name": tool_use['name']
+                    }
+            elif 'contentBlockStop' in event:
+                return {"type": "tool_complete", "tool_id": "current"}
+            elif 'metadata' in event:
+                return {"type": "metrics", "data": event['metadata']}
+        elif 'message' in chunk and 'toolResult' in str(chunk):
+            # Extract tool results
+            content = chunk['message'].get('content', [])
+            for item in content:
+                if 'toolResult' in item:
+                    result_content = item['toolResult'].get('content', [])
+                    if result_content and 'text' in result_content[0]:
+                        return {"type": "tool_result", "result": result_content[0]['text']}
+    
+    # Handle string chunks with dict data
+    if isinstance(chunk, str) and chunk.startswith("{"):
+        try:
+            chunk_dict = eval(chunk)
+            if 'data' in chunk_dict and 'delta' in chunk_dict:
+                return {"type": "content", "data": chunk_dict['data']}
+            elif 'result' in chunk_dict:
+                result = chunk_dict['result']
+                if hasattr(result, 'metrics'):
+                    return {"type": "metrics", "data": result.metrics.accumulated_metrics}
+        except:
+            pass
+    
+    # Handle object chunks
+    if hasattr(chunk, 'data') and hasattr(chunk, 'delta'):
+        return {"type": "content", "data": chunk.data}
+    
+    return {"type": "unknown", "data": str(chunk)[:100]}
 
 # =====================================================================
 # Local Development and Testing

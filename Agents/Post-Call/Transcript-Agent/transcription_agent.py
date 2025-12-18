@@ -1,6 +1,6 @@
 from __future__ import annotations
-from strands import Agent,tool
-from typing import Optional, Dict, Any
+from strands import Agent, tool
+from typing import Optional, Dict, Any, Tuple
 import os
 import json
 import time
@@ -33,7 +33,7 @@ def get_parameter_value(parameter_name):
     
 # Config values (change anytime)
 AUDIO_BUCKET = get_parameter_value("SC_POC_SA_TA_BUCKET")
-AUDIO_PREFIX = get_parameter_value("SC_POC_TA_AUDIO_PREFIX")  # <-- your audio folder prefix
+AUDIO_PREFIX = get_parameter_value("SC_POC_TA_AUDIO_PREFIX")
 TEMP_UPLOAD_BUCKET = get_parameter_value("SC_POC_SA_TA_BUCKET")
 TRANSCRIBE_OUTPUT_BUCKET = get_parameter_value("SC_POC_SA_TA_BUCKET")
 
@@ -45,9 +45,8 @@ def transcribe_audio(
     hcp_id: Optional[str] = None,
     s3_audio_uri: Optional[str] = None,
     local_audio_path: Optional[str] = None,
-    output_s3_prefix: Optional[str],
+    output_s3_prefix: Optional[str] = None,
     language_code: str = "en-US",
-    use_medical: bool = False, 
     media_format: Optional[str] = "mp3",
     timeout_minutes: int = 20,
     cleanup_temp: bool = False,
@@ -55,19 +54,21 @@ def transcribe_audio(
     max_speakers: int = 2,
 ) -> Dict[str, Any]:
     """
-    Main transcription tool. Auto-builds S3 URI using only the HCP_ID and AUDIO_PREFIX.
+    Transcribes audio and returns ONLY the final text transcription.
+    Raw and structured transcripts are persisted to S3 internally.
     """
 
     if not (hcp_id or s3_audio_uri or local_audio_path):
         raise ValueError("Provide either hcp_id, s3_audio_uri, or local_audio_path")
 
-    s3_client = boto3.client("s3", region_name='us-east-1')
-    transcribe_client = boto3.client("transcribe", region_name='us-east-1')
+    s3_client = boto3.client("s3", region_name="us-east-1")
+    transcribe_client = boto3.client("transcribe", region_name="us-east-1")
 
-    # Build S3 URI automatically if hcp_id is provided
+    # Build S3 URI from HCP ID
     if hcp_id and not s3_audio_uri:
         s3_audio_uri = f"s3://{AUDIO_BUCKET}/{AUDIO_PREFIX}{hcp_id}.{media_format}"
 
+    # Upload local file if provided
     temp_key = None
     if local_audio_path:
         if not os.path.exists(local_audio_path):
@@ -77,35 +78,32 @@ def transcribe_audio(
         s3_client.upload_file(local_audio_path, TEMP_UPLOAD_BUCKET, temp_key)
         s3_audio_uri = f"s3://{TEMP_UPLOAD_BUCKET}/{temp_key}"
 
+    # Infer media format if missing
     if not media_format:
-        ext = os.path.splitext(s3_audio_uri)[1].lstrip(".").lower()#type:ignore
-        if ext:
-            media_format = ext
-        else:
-            raise ValueError("media_format missing & cannot be inferred.")
+        ext = os.path.splitext(s3_audio_uri)[1].lstrip(".").lower()  # type: ignore
+        if not ext:
+            raise ValueError("media_format missing & cannot be inferred")
+        media_format = ext
 
-    supported_formats = {"mp3", "wav", "mp4", "flac", "amr", "ogg", "webm", "m4a"}
-    if media_format.lower() not in supported_formats:#type:ignore
+    supported_formats = {
+        "mp3", "wav", "mp4", "flac", "amr", "ogg", "webm", "m4a"
+    }
+    if media_format.lower() not in supported_formats:
         raise ValueError(f"Unsupported media format: {media_format}")
 
     job_name = f"transcribe-{uuid.uuid4().hex[:12]}"
+
     if not output_s3_prefix or not output_s3_prefix.startswith("s3://"):
-        output_s3_prefix = f"s3://{TEMP_UPLOAD_BUCKET}/{job_name}/"
+        output_s3_prefix = f"s3://{TEMP_UPLOAD_BUCKET}/transcripts/{job_name}/"
 
     output_bucket, output_prefix = _split_s3_prefix(output_s3_prefix)
 
-    media_settings = {
-        "MediaFormat": media_format,
-        "Media": {"MediaFileUri": s3_audio_uri},
-    }
-
-    # -------------------------------
-    # STANDARD TRANSCRIBE (no medical)
-    # -------------------------------
+    # Start Transcription Job
     params = {
         "TranscriptionJobName": job_name,
         "LanguageCode": language_code,
-        **media_settings,
+        "MediaFormat": media_format,
+        "Media": {"MediaFileUri": s3_audio_uri},
         "OutputBucketName": TRANSCRIBE_OUTPUT_BUCKET,
     }
 
@@ -116,53 +114,78 @@ def transcribe_audio(
         }
 
     transcribe_client.start_transcription_job(**params)
-    get_status = lambda: transcribe_client.get_transcription_job(
-        TranscriptionJobName=job_name
-    )
-    extract_path = ("TranscriptionJob", "Transcript", "TranscriptFileUri")
-    status_path = ("TranscriptionJob", "TranscriptionJobStatus")
 
-    # -------------------------------
-    # Poll until done
-    # -------------------------------
+    # Poll until complete
     start_time = time.time()
     timeout_seconds = timeout_minutes * 60
     attempt = 0
-    transcript_uri = None
 
     while True:
         if time.time() - start_time > timeout_seconds:
-            raise TimeoutError("Transcription job timed out.")
+            raise TimeoutError("Transcription job timed out")
 
-        status_response = get_status()
-        job_status = _deep_get(status_response, status_path)
+        response = transcribe_client.get_transcription_job(
+            TranscriptionJobName=job_name
+        )
 
-        if job_status == "FAILED":
-            fail_reason = _deep_get(status_response, (*status_path[:-1], "FailureReason"))
-            raise RuntimeError(f"Transcribe job failed: {fail_reason}")
+        status = _deep_get(
+            response,
+            ("TranscriptionJob", "TranscriptionJobStatus"),
+        )
 
-        if job_status == "COMPLETED":
-            transcript_uri = _deep_get(status_response, extract_path)
+        if status == "FAILED":
+            reason = _deep_get(
+                response,
+                ("TranscriptionJob", "FailureReason"),
+            )
+            raise RuntimeError(f"Transcription failed: {reason}")
+
+        if status == "COMPLETED":
+            transcript_uri = _deep_get(
+                response,
+                ("TranscriptionJob", "Transcript", "TranscriptFileUri"),
+            )
             break
 
         time.sleep(min(60, 2 ** attempt) * random.uniform(0.5, 1.5))
         attempt += 1
 
-    raw_json = _download_transcript(transcript_uri, s3_client)#type:ignore
+    # ---------------------------------------------------
+    # Download ONCE, persist internally, return text only
+    # ---------------------------------------------------
+    raw_json = _download_transcript(transcript_uri, s3_client)  # type: ignore
+
+    # Persist RAW
+    raw_key = f"{output_prefix.rstrip('/')}/{job_name}-raw.json"
+    s3_client.put_object(
+        Bucket=output_bucket,
+        Key=raw_key,
+        Body=json.dumps(raw_json).encode("utf-8"),
+        ContentType="application/json",
+    )
+
     structured = _structure_transcript(raw_json)
 
-    final_uri = f"{output_s3_prefix.rstrip('/')}/{job_name}-structured.json"
+    # Persist structured
+    structured_key = f"{output_prefix.rstrip('/')}/{job_name}-structured.json"
+    s3_client.put_object(
+        Bucket=output_bucket,
+        Key=structured_key,
+        Body=json.dumps(structured, indent=2).encode("utf-8"),
+        ContentType="application/json",
+    )
 
     if cleanup_temp and temp_key:
         try:
-            s3_client.delete_object(Bucket=TEMP_UPLOAD_BUCKET, Key=temp_key)
+            s3_client.delete_object(
+                Bucket=TEMP_UPLOAD_BUCKET,
+                Key=temp_key,
+            )
         except Exception:
-            print("[WARN] temp cleanup failed.")
+            pass
 
     return {
-        "transcript_s3_uri": final_uri,
-        "transcript_json": structured,
-        "raw_transcribe_response": raw_json,
+        "text": structured["text"]
     }
 
 

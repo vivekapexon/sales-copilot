@@ -344,7 +344,7 @@ const GenAIPage = ({ heading, setIsNewChat }: ChatPageProps) => {
                     </svg>
                   </span>
                 }
-                minRows={2}
+                minRows={1}
                 ref={promptInputRef}
                 onChange={({ detail }) => setPrompt(detail.value)}
                 onAction={onPromptSend}

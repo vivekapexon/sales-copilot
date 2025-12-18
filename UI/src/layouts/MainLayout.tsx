@@ -42,10 +42,8 @@ const MainLayout = forwardRef<AppLayoutProps.Ref, AppLayoutProps>(
     );
     const [searchParams] = useSearchParams();
     const items: SideNavigationProps.Item[] = [
-      // { type: "link", text: "Home", href: "/" },
       { type: "link", text: "Pre-Call Analysis", href: "/" },
       { type: "link", text: "Post-Call Analysis", href: "/post-call" },
-      // { type: "divider" },
     ];
     const [navigationOpen, setNavigationOpen] = useState<boolean>(true);
     const [selectedModule, setSelectedModule] = useState<any>(items[0]);
@@ -159,11 +157,9 @@ const MainLayout = forwardRef<AppLayoutProps.Ref, AppLayoutProps>(
                 activeHref={location.pathname}
                 header={{ text: "Menu", href: "/" }}
                 items={items}
-                // itemsControl
                 onFollow={(event) => {
                   event.preventDefault();
                   onNavChange(event.detail);
-                  // navigate(event.detail.href);
                 }}
               />
               <hr
@@ -190,16 +186,12 @@ const MainLayout = forwardRef<AppLayoutProps.Ref, AppLayoutProps>(
                       }
                     />
 
-                    {/* <ScrollableList> */}
                     <List
                       ariaLabel="List with icons and actions"
                       items={filteredChatHistory}
                       renderItem={(item) => ({
                         id: item.session_id,
                         content: (
-                          // <Link href={`?session=${item.session_id}`}>
-                          //   {item.title}
-                          // </Link>
                           <NavLink
                             to={`?session=${item.session_id}`}
                             replace={true}
@@ -228,32 +220,11 @@ const MainLayout = forwardRef<AppLayoutProps.Ref, AppLayoutProps>(
           breadcrumbs={
             <BreadcrumbGroup items={breadcrumbs} ariaLabel="Breadcrumbs" />
           }
-          // toolsHide={true}
-          //   toolsOpen={state.toolsOpen}
+          toolsHide={true}
           onToolsChange={(event) => {
             actions.setToolsOpen(event.detail.open);
           }}
-          toolsWidth={400}
-          //   notifications={<Notifications />}
-          //   tools={
-          //     <>
-          //       <Tabs
-          //         activeTabId={state.toolsTab}
-          //         onChange={(event) =>
-          //           actions.setToolsTab(event.detail.activeTabId)
-          //         }
-          //         tabs={[
-          //           {
-          //             id: "help-panel",
-          //             label: "Information",
-          //             content: helpPanelContent[state.helpPanelTopic],
-          //           },
-          //         ]}
-          //       />
-          //     </>
-          //   }
           content={<Outlet />}
-          //   {...props}
         />
       </I18nProvider>
     );

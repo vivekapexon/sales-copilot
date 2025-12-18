@@ -2,7 +2,7 @@ version: 0.2
 
 env:
   variables:
-    SERVICE_NAME: "strategy-agent"
+    SERVICE_NAME: "strategy_agent"
     USECASE_NAME: "sales-copilot"
     AGENT_REPO_PATH: "Agents/Pre-Call/Strategy_Agent/"
     REGION: "us-east-1"

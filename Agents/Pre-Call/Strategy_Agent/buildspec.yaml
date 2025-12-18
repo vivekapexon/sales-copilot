@@ -14,7 +14,6 @@ phases:
     commands:
       - echo "=== INSTALL PHASE ==="
       - pwd
-      - git submodule update --init --recursive
      # Install system dependencies
       - apt update
       - apt install openssh-client jq tar gzip
@@ -34,7 +33,7 @@ phases:
       - echo "Creating virtual environment"
       - cd $AGENT_REPO_PATH
       - python3 -m venv agent/$SERVICE_NAME
-      - source /home/ubuntu/agent/$SERVICE_NAME/bin/activate
+      - . /home/ubuntu/agent/$SERVICE_NAME/bin/activate
       - pip install -r requirements.txt
       # Check prerequisites
       - |
@@ -79,4 +78,3 @@ artifacts:
   files:
     - '**/*'
   base-directory: $BUILD_OUTPUT_DIR
-

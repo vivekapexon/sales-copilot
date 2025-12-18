@@ -2,6 +2,7 @@ import { SpaceBetween, Button, Box } from "@cloudscape-design/components";
 import Modal from "@cloudscape-design/components/modal";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { downloadPdf } from "../api/downloadpdf";
 
 interface LogModalProps {
   content: any;
@@ -29,6 +30,15 @@ const LogModal = ({ content, showModal, setShowModal }: LogModalProps) => {
         <Box>
           <SpaceBetween direction="horizontal" size="s">
             <Box variant="h2">All Logs</Box>
+            {content && content.length > 0 && (
+              <Box textAlign="right" float="right">
+                <Button
+                  variant="icon"
+                  iconName="download"
+                  onClick={() => downloadPdf(content, "log" + Date.now())}
+                />
+              </Box>
+            )}
           </SpaceBetween>
         </Box>
       }

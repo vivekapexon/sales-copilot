@@ -19,7 +19,12 @@ import {
   TextFilter,
   type SideNavigationProps,
 } from "@cloudscape-design/components";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import {
+  NavLink,
+  Outlet,
+  useNavigate,
+  useSearchParams,
+} from "react-router-dom";
 import HeaderComponent from "../components/Header";
 import { useStore } from "../store";
 import { useAuth } from "../context/AuthContext";
@@ -35,6 +40,7 @@ const MainLayout = forwardRef<AppLayoutProps.Ref, AppLayoutProps>(
     const filteredChatHistory = chatHistoryList.filter((item) =>
       item.title.toLowerCase().includes(filterText.toLowerCase())
     );
+    const [searchParams] = useSearchParams();
     const items: SideNavigationProps.Item[] = [
       // { type: "link", text: "Home", href: "/" },
       { type: "link", text: "Pre-Call Analysis", href: "/" },
@@ -91,6 +97,7 @@ const MainLayout = forwardRef<AppLayoutProps.Ref, AppLayoutProps>(
     };
 
     const deleteSession = (item: any) => {
+      console.log(location);
       deleteChatSession(item.session_id, item.user_id).then(
         (res: any) => {
           console.log(res);
@@ -106,6 +113,10 @@ const MainLayout = forwardRef<AppLayoutProps.Ref, AppLayoutProps>(
               },
             ]);
             getChatHistoryList();
+            const sessionIdFromUrl = searchParams.get("session");
+            if (sessionIdFromUrl == item.session_id) {
+              handleNewChat();
+            }
           } else {
             setFlashItems([
               {

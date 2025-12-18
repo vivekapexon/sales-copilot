@@ -76,12 +76,12 @@ const GenAIPage = ({ heading, setIsNewChat }: ChatPageProps) => {
     : "";
 
   useEffect(() => {
-    setMessages(getInitialMessages(state.moduleSelected));
+    const moduleName = heading.replace(" ", "-").toLowerCase();
+    setMessages(getInitialMessages(moduleName));
     setHelpPanelData(null);
     setHelpPanelTopic("");
     setToolsOpen(false);
     setToolsTab("no-help");
-    const moduleName = heading.replace(" ", "-").toLowerCase();
     setModuleSelected(moduleName);
     // setMessages([]);
     // setCurrentMessage("");

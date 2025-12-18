@@ -1,8 +1,7 @@
-import json
+import re
 from strands import Agent,tool
 import boto3
 from typing import Dict, Any
-import time
 s3 = boto3.client("s3")
 bedrock = boto3.client("bedrock-runtime", region_name= "us-east-1")
 import logging
@@ -12,206 +11,95 @@ logger = logging.getLogger("compilance_agent")
 s3_client = boto3.client("s3")
 app = BedrockAgentCoreApp()
 
-def get_parameter_value(parameter_name):
-    """Fetch an individual parameter by name from AWS Systems Manager Parameter Store.
+# Tokens considered placeholders / not useful
+_PLACEHOLDER_TOKENS = {"[inaudible]", "[noise]", "[silence]", "[unintelligible]"}
 
-    Returns:
-        str or None: The parameter value (decrypted if needed) or None on error.
+NULL_OBJECT = {
+    "call_sentiment_score": None,
+    "sentiment_confidence": None,
+    "receptivity_trend_90d_slope": None,
+    "relationship_stage": None,
+    "objection_intensity_index": None,
+    "positive_to_negative_ratio": None,
+    "next_call_risk_level": None,
+    "notes_tone_summary": None,
+    "data_available": False,
+}
 
-    Notes:
-      - This helper reads configuration from SSM Parameter Store. Example usage in this module:
-          get_parameter_value("EDC_DATA_BUCKET") -> returns the S3 bucket name used for EDC files.
-    """
-    try:
-        ssm_client = boto3.client("ssm")
-        response = ssm_client.get_parameter(Name=parameter_name, WithDecryption=True)
-        return response["Parameter"]["Value"]
-    except Exception as e:
-        print(f"Error fetching parameter {parameter_name}: {str(e)}")
-        return None
-
-# ----------------------
-# Configuration 
-# ----------------------
-WORKGROUP = get_parameter_value("REDSHIFT_WORKGROUP")
-DATABASE = get_parameter_value("SC_REDSHIFT_DATABASE")
-SECRET_ARN = get_parameter_value("SC_REDSHIFT_SECRET_ARN")
-TRANSCRIPT_TABLE = get_parameter_value("SC_POC_VOICE_CRM_TABLE") 
-TRANSCRIPTION_BUCKET = get_parameter_value("SC_POC_SA_TA_BUCKET")
-RESULT_BUCKET = get_parameter_value("SC_POC_SA_TA_BUCKET")
-CSV_BUCKET=get_parameter_value("SC_POC_SA_TA_BUCKET")
-
-# Optional: set a default row limit for arbitrary SQL to avoid accidental full-table scans
-DEFAULT_SQL_LIMIT = 1000
-SQL_POLL_INTERVAL_SECONDS = 0.5
-SQL_POLL_MAX_SECONDS = 30.0
-# ----------------------
-# Helper: Redshift Data API tool
-# ----------------------
-
-def execute_redshift_sql(sql_query: str, return_results: bool = True) -> Dict[str, Any]:
-    """
-    Execute arbitrary SQL against Redshift Serverless Data API (workgroup mode).
-    Returns a dict: {"status":"finished","rows":[{col:val,...}, ...]} or error structure.
-
-    - sql_query: SQL string to execute (caller is responsible for safety/validation).
-    - return_results: when False, only returns execution status.
-    """
-    client = boto3.client("redshift-data")
-    try:
-        resp = client.execute_statement(
-            WorkgroupName=WORKGROUP,
-            Database=DATABASE,
-            SecretArn=SECRET_ARN,
-            Sql=sql_query
-        )
-        stmt_id = resp["Id"]
-    except Exception as e:
-        return {"status": "error", "message": f"execute_statement error: {str(e)}"}
-
-    # Poll for completion
-    elapsed = 0.0
-    while elapsed < SQL_POLL_MAX_SECONDS:
-        try:
-            status_resp = client.describe_statement(Id=stmt_id)
-            status = status_resp.get("Status")
-        except Exception as e:
-            return {"status": "error", "message": f"describe_statement error: {str(e)}"}
-        if status in ("FINISHED", "ABORTED", "FAILED"):
-            break
-        time.sleep(SQL_POLL_INTERVAL_SECONDS)
-        elapsed += SQL_POLL_INTERVAL_SECONDS
-
-    if status != "FINISHED":
-        # Try to return error details if available
-        try:
-            status_resp = client.describe_statement(Id=stmt_id)
-            return {"status": status, "message": status_resp.get("Error")}
-        except Exception:
-            return {"status": status, "message": "Statement did not finish within time limit."}
-
-    if not return_results:
-        return {"status": "finished", "statement_id": stmt_id}
-
-    # Retrieve results
-    try:
-        results = client.get_statement_result(Id=stmt_id)
-    except Exception as e:
-        return {"status": "error", "message": f"get_statement_result error: {str(e)}"}
-
-    column_info = [c["name"] for c in results.get("ColumnMetadata", [])]
-    records = []
-    for row in results.get("Records", []):
-        # Each row: list of field dicts, convert to native types where possible
-        parsed_row = {}
-        for idx, cell in enumerate(row):
-            col_name = column_info[idx] if idx < len(column_info) else f"col_{idx}"
-            # cell is like {"stringValue": "..."} or {"longValue": 123} etc.
-            if "stringValue" in cell:
-                parsed_row[col_name] = cell["stringValue"]
-            elif "blobValue" in cell:
-                parsed_row[col_name] = cell["blobValue"]
-            elif "doubleValue" in cell:
-                parsed_row[col_name] = cell["doubleValue"]
-            elif "longValue" in cell:
-                parsed_row[col_name] = cell["longValue"]
-            elif "booleanValue" in cell:
-                parsed_row[col_name] = cell["booleanValue"]
-            elif "isNull" in cell and cell["isNull"]:
-                parsed_row[col_name] = None
-            else:
-                # unknown form; store raw
-                parsed_row[col_name] = list(cell.values())[0] if cell else None
-        records.append(parsed_row)
-
-    return {"status": "finished", "rows": records, "statement_id": stmt_id}
+def _is_placeholder_only(text: str) -> bool:
+    """Return True if text contains only placeholder tokens / punctuation / whitespace."""
+    if not text or not text.strip():
+        return True
+    lower = text.strip().lower()
+    # Strip common punctuation and numeric tokens
+    stripped = re.sub(r"[^\w\[\]\s]", " ", lower)
+    tokens = [t for t in re.split(r"\s+", stripped) if t]
+    if not tokens:
+        return True
+    # If all tokens are in placeholder set or numeric / tiny
+    meaningful = [t for t in tokens if t not in _PLACEHOLDER_TOKENS and len(t) > 1]
+    return len(meaningful) == 0
 
 
 
 @tool
-def save_structured_note(key: str, note: Dict[str, Any]) -> str:
-    """Save the structured note to S3 bucket."""
-    result_key = key.replace("transcriptions/", "notes/", 1)
-    if result_key.endswith(".json"):
-        result_key = result_key.replace(".json", "_note.json")
-    else:
-        result_key += "_note.json"
-
-    s3.put_object(
-        Bucket=RESULT_BUCKET,
-        Key=result_key,
-        Body=json.dumps(note, indent=2),
-        ContentType="application/json"
-    )
-    return f"Saved to s3://{RESULT_BUCKET}/{result_key}"
-
-@tool
-def load_transcription_data_from_redshift(hcp_id: str) -> str:
+def validate_transcription_for_sentiment(transcription_text: Optional[str]) -> Dict[str, Any]:#type:ignore
     """
-    Load a transcript text row from Redshift for the specified HCP ID and return it as a JSON string.
+    Validate transcription text for downstream Sentiment/Insight agent.
 
-    Behavior:
-      - Queries Redshift using the execute_redshift_sql tool.
-      - Returns a JSON string of the first matching row (or an error JSON).
-      - Keep TRANSCRIPT_TABLE updated to the correct schema.table.
+    Input:
+        transcription_text: raw transcript string (may be None)
 
-    Args:
-        hcp_id: The HCP ID to filter and retrieve the specific row for.
+    Returns (dict):
+    - If transcription is insufficient, returns the exact NULL_OBJECT (so agent LLM can return the null-object).
+    - If transcription is sufficient, returns a dict:
+        {
+          "data_available": True,
+          "transcription_text": "<original text trimmed>",
+          "transcription_length_chars": <int>,
+          "transcription_length_words": <int>,
+          "placeholder_token_fraction": <float 0-1>
+        }
 
-    Returns:
-        JSON string: either the row dict or {"error": "..."}.
+    Important: This tool DOES NOT call any LLM/agent. It only validates/normalizes text.
     """
-    # Basic sanitization to reduce risk of SQL injection; prefer parameterized execution if available
-    if hcp_id is None:
-        return json.dumps({"error": "hcp_id is required"})
+    # Normalize input
+    if transcription_text is None:
+        return NULL_OBJECT
 
-    # Escape single quotes (simple mitigation)
-    safe_hcp_id = str(hcp_id).replace("'", "''")
+    # convert to str and trim
+    text = str(transcription_text).strip()
 
-    sql = f"""
-    SELECT *
-    FROM {TRANSCRIPT_TABLE}
-    WHERE hcp_id = '{safe_hcp_id}'
-    LIMIT 1;
-    """.strip()
+    # Quick length checks
+    if len(text) < 30:
+        return NULL_OBJECT
 
-    print(f"Querying Redshift table {TRANSCRIPT_TABLE} for HCP ID: {hcp_id}")
+    # compute token stats
+    words = [w for w in re.split(r"\s+", text) if w]
+    word_count = len(words)
+    char_count = len(text)
 
-    try:
-        resp = execute_redshift_sql(sql, return_results=True)
-    except Exception as e:
-        return json.dumps({"error": f"execute_redshift_sql call failed: {str(e)}"})
+    # fraction of placeholder-like tokens
+    lower_words = [w.strip().lower() for w in words]
+    placeholder_count = sum(1 for w in lower_words if w in _PLACEHOLDER_TOKENS)
+    placeholder_fraction = placeholder_count / max(1, word_count)
 
-    # Resp expected shape: {"status":"finished","rows":[{col:val,...}, ...], ...} or error structure
-    if not isinstance(resp, dict):
-        return json.dumps({"error": "Unexpected response from execute_redshift_sql"})
+    # If more than 70% placeholder tokens -> insufficient
+    if placeholder_fraction > 0.7 or _is_placeholder_only(text):
+        return NULL_OBJECT
 
-    status = resp.get("status")
-    if status != "finished":
-        # pass along error/message if present
-        msg = resp.get("message", f"Redshift statement status: {status}")
-        return json.dumps({"error": msg})
+    # If after heuristics it's borderline short (<30 chars or <5 words) => insufficient
+    if char_count < 30 or word_count < 5:
+        return NULL_OBJECT
 
-    rows = resp.get("rows", [])
-    if not rows:
-        return json.dumps({"error": f"No row found for HCP ID: {hcp_id}"})
-
-    # Return the first matching row (to mirror the original S3 loader behavior)
-    row_data = rows[0]
-
-    # Ensure JSON-serializable values (convert non-serializable to strings)
-    try:
-        json.dumps(row_data)  # quick test
-    except TypeError:
-        # convert problematic values to strings
-        for k, v in list(row_data.items()):
-            try:
-                json.dumps(v)
-            except TypeError:
-                row_data[k] = str(v)
-
-    return json.dumps(row_data)
-
+    # Passed checks -> return normalized metadata + transcription
+    return {
+        "data_available": True,
+        "transcription_text": text,
+        "transcription_length_chars": char_count,
+        "transcription_length_words": word_count,
+        "placeholder_token_fraction": round(placeholder_fraction, 3),
+    }
 
 # Define the agent
 def create_call_structure_agent():
@@ -222,16 +110,19 @@ def create_call_structure_agent():
 You are Sales Call Analyzer, an elite sales-call intelligence system specializing in turning raw conversation transcripts into structured, actionable insights.
 
 Your responsibilities:
+Before performing ANY analysis, you MUST call the tool:
+    validate_transcription_for_sentiment(transcription_text=<user transcript>)
 
-1. ALWAYS load the transcription data first
-   - When a user asks to analyze a call or provides an HCP ID  you MUST begin by calling:
-     `load_transcription_data_from_redshift(hcp_id=...)`
-   - Use the returned JSON row data as the source of truth. Extract `transcript_text` as the primary transcript for analysis.
+1. ALWAYS call the validation tool FIRST, before doing any reasoning.    
+
+2. ALWAYS load the transcription data first by calling Transcription Agent.
+   - When a user asks to analyze a call or provides an transcription text
+   - Use the provided JSON row data as the source of truth. Extract `transcript_text` as the primary transcript for analysis.
    - Incorporate contextual details from other fields (e.g., `territory_id`, `call_id`, `call_datetime_local`, `call_duration_minutes`, `structured_call_summary`, `key_topics_tags`, `objection_categories`, `compliance_redaction_flag`) to enrich your analysis and ensure relevance to the HCP's territory, history, and compliance needs.
    - Respect `compliance_redaction_flag`: If flagged, avoid referencing redacted content in outputs and note any limitations in the summary.
 
-2. Extract structured insights
-   After receiving the HCP row JSON, parse it and analyze the `transcript_text` (enhancing with other row fields where relevant). Produce a JSON object with the following fields:
+3. Extract structured insights
+   After receiving the HCP rawtranscription text , parse it and analyze the `transcript_text` (enhancing with other row fields where relevant). Produce a JSON object with the following fields:
 
    {
      "hcp_id": "the provided HCP ID",
@@ -258,11 +149,6 @@ Your responsibilities:
    - If a field cannot be determined, use an empty list [] or null as appropriate. For summary, make it concise yet comprehensive (200-400 words), focusing on HCP-specific insights like engagement level, pain points tied to territory, and opportunities.
    - Be concise, factual, and base all insights strictly on the transcript text, augmented by row context.
 
-3. Saving structured notes
-   - If the user explicitly asks you to SAVE the structured JSON, call:
-     `save_structured_note(call_id=..., structured_json=...)`
-   - Use the `call_id` from the row data. The tool payload must be the exact JSON object produced.
-
 4. Output rules
    - When returning analysis results to the user, OUTPUT ONLY valid JSON (no commentary, no markdown).
    - When invoking a tool, return only the tool invocation according to your agent/tool protocol.
@@ -275,13 +161,14 @@ Your responsibilities:
    - Tailor insights to HCP context: E.g., reference territory-specific trends if inferable from row data.
 
 Workflow (strict):
-1. Call load_transcription_data_from_redshift(hcp_id=...)
-2. Parse the returned JSON row, extract and analyze transcript_text with contextual fields
-3. Return the enriched structured JSON
+1 Call validate_transcription_for_sentiment()
+2. Call Transcription Agent if you don't have trasnscription text.
+3. Parse the returned JSON row, extract and analyze transcript_text with contextual fields
+4. Return the enriched structured JSON
 
 Remember: Valid JSON only. No additional text.
 """,
-    tools=[load_transcription_data_from_redshift]
+    tools=[validate_transcription_for_sentiment]
 )
 
 agent=create_call_structure_agent()

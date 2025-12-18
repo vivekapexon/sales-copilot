@@ -30,6 +30,7 @@ phases:
     commands:
       - echo "=== INSTALL PHASE ==="
       - pwd
+      - git submodule update --init --recursive
       
       - |
           if ! command -v aws &> /dev/null; then

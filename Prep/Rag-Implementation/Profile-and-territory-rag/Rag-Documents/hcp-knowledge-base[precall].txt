@@ -1,0 +1,334 @@
+### healthcare_data Table (public.healthcare_data)
+
+#### Purpose
+Comprehensive HCP and territory intelligence data supporting AI-powered field sales operations.
+
+#### Key Columns and Business Meaning
+
+| Column Name | Data Type | Business Description | Common Query Usage |
+|-------------|-----------|---------------------|-------------------|
+| **HCP Identification** | | | |
+| hcp_id | VARCHAR(50) | Unique healthcare provider identifier | Filter by specific HCP |
+| doctor_first_name | VARCHAR(50) | HCP first name | Display, search |
+| doctor_last_name | VARCHAR(50) | HCP last name | Display, search |
+| hco_id | VARCHAR(50) | Healthcare organization identifier | Link to practice location |
+| territory_id | VARCHAR(50) | Sales territory identifier | Territory analysis |
+| as_of_date | DATE | Data snapshot date | Time-based filtering |
+
+| **HCP Profile & Practice** | | | |
+| specialty_primary | VARCHAR(100) | Primary medical specialty | Segment analysis |
+| subspecialty | VARCHAR(100) | Medical subspecialty | Detailed targeting |
+| practice_setting | VARCHAR(100) | Practice type (e.g., "Private Practice") | Setting analysis |
+| years_in_practice | INTEGER | Years practicing medicine | Experience segmentation |
+| hco_type | VARCHAR(50) | Organization type (e.g., "Hospital") | Practice type analysis |
+| hco_size_bucket | VARCHAR(50) | Organization size category | Scale analysis |
+| hospital_affiliation_flag | BOOLEAN | Hospital affiliation indicator | Affiliation targeting |
+| kol_flag | BOOLEAN | Key Opinion Leader status | KOL identification |
+
+| **Prescribing Metrics** | | | |
+| trx_7d | INTEGER | Total prescriptions last 7 days | Recent activity |
+| trx_28d | INTEGER | Total prescriptions last 28 days | Monthly volume |
+| trx_90d | INTEGER | Total prescriptions last 90 days | Quarterly volume |
+| nrx_28d | INTEGER | New prescriptions last 28 days | Monthly new starts |
+| nbrx_28d | INTEGER | New-to-brand prescriptions last 28 days | Brand switching |
+| share_28d | DOUBLE | Market share percentage last 28 days | Current share position |
+| trx_28d_wow_pct | DOUBLE | Week-over-week Rx change % | Short-term trends |
+| trx_90d_qoq_pct | DOUBLE | Quarter-over-quarter Rx change % | Long-term trends |
+| share_28d_delta | DOUBLE | Market share percentage change (28d) | Share momentum |
+
+| **Competitive Intelligence** | | | |
+| comp_trx_share_28d | DOUBLE | Competitor market share (28d) | Competitive position |
+| comp_share_28d_delta | DOUBLE | Competitor share percentage change | Competitive threats |
+| comp_detail_60d_cnt | INTEGER | Competitor sales calls (60d) | Competitive activity |
+
+| **Market Access & Payer** | | | |
+| formulary_tier_score | INTEGER | Formulary tier ranking | Access quality |
+| prior_auth_required_flag | BOOLEAN | Prior authorization required | Access barriers |
+| step_therapy_required_flag | BOOLEAN | Step therapy required | Access barriers |
+| access_friction_index | DOUBLE | Overall access difficulty score | Access challenges |
+
+| **Engagement History** | | | |
+| calls_90d_cnt | INTEGER | Sales calls last 90 days | Call frequency |
+| meetings_90d_cnt | INTEGER | Meetings held last 90 days | Meeting success |
+| last_contact_days_ago | INTEGER | Days since last contact | Recency tracking |
+| meeting_accept_rate_90d | DOUBLE | Meeting acceptance rate | Receptivity |
+| email_open_rate_60d | DOUBLE | Email open rate | Digital engagement |
+
+| **Performance & Potential** | | | |
+| monthly_goal_trx | INTEGER | Monthly prescription goal | Target setting |
+| gap_to_goal_28d | INTEGER | Gap to monthly goal | Performance tracking |
+| potential_uplift_index | DOUBLE | Growth potential score | Opportunity sizing |
+| adoption_stage_ordinal | INTEGER | Adoption lifecycle stage (1-5) | Lifecycle position |
+| receptivity_score | DOUBLE | Overall receptivity to engagement | Engagement potential |
+| churn_risk_score | DOUBLE | Risk of prescribing decline | Retention priority |
+
+| **Network & Influence** | | | |
+| degree_centrality | DOUBLE | Network connections count | Network size |
+| betweenness_centrality | DOUBLE | Network bridging position | Influence reach |
+| spillover_potential_index | DOUBLE | Influence on other HCPs | Network effects |
+
+| **Territory & Logistics** | | | |
+| distance_km_from_homebase | DOUBLE | Distance from rep home base (km) | Travel planning |
+| drive_time_minutes | DOUBLE | Drive time from home base | Route optimization |
+| morning_window_allowed_flag | BOOLEAN | Morning visits allowed | Scheduling |
+| afternoon_window_allowed_flag | BOOLEAN | Afternoon visits allowed | Scheduling |
+
+| **Compliance & Eligibility** | | | |
+| exclusion_list_flag | BOOLEAN | On exclusion/do-not-contact list | Compliance |
+| max_calls_per_28d | INTEGER | Maximum allowed calls per month | Compliance limits |
+
+
+## Query Patterns and Business Logic
+
+### Territory Prioritization Pattern
+
+**Purpose**: Identify which territories need immediate attention based on composite scoring
+
+**Key Approach**:
+1. **Aggregate by Territory**: Use `GROUP BY territory_id` to roll up HCP-level data
+2. **Calculate Territory Metrics**:
+   - Total HCPs in territory
+   - Sum of prescriptions across HCPs
+   - Average market share across HCPs
+   - Total gap to goal
+   - Count of high-risk HCPs (churn_risk_score > 0.3)
+   - Count of overdue contacts (last_contact_days_ago > 45)
+   - Count of competitive threats (comp_share_28d_delta > 0.05)
+
+3. **Compute Urgency Score**:
+   ```
+   urgency_score = (high_churn_risk_count * 0.3) + 
+                   (overdue_contact_count * 0.3) + 
+                   (competitive_threat_count * 0.2) +
+                   (CASE WHEN total_gap_to_goal > 100 THEN 0.2 ELSE 0 END)
+   ```
+
+4. **Order Results**: Order by urgency_score DESC to get top priority territories
+
+**Required Filters**:
+- `exclusion_list_flag = false` (only include active HCPs)
+
+
+**Data Source**: public.healthcare_data
+
+
+### HCP Prioritization Pattern
+
+**Purpose**: Identify which HCPs to target within a territory based on priority scoring
+
+**Key Approach**:
+1. **Calculate Composite Priority Score**:
+   ```
+   priority_score = (potential_uplift_index / 1.5) * 30 +    /* Growth opportunity - 30% weight */
+                    (receptivity_score / 100) * 25 +          /* Engagement likelihood - 25% weight */
+                    (churn_risk_score / 0.5) * 20 +           /* Retention risk - 20% weight */
+                    (CASE WHEN gap_to_goal_28d > 0 THEN 15 ELSE 0 END) +  /* Performance gap - 15% weight */
+                    (CASE WHEN last_contact_days_ago > 45 THEN 10 ELSE 0 END)  /* Contact timing - 10% weight */
+   ```
+
+2. **Rank HCPs**: Use `ROW_NUMBER() OVER (ORDER BY priority_score DESC)` for ranking
+
+3. **Apply Filters**:
+   - Territory filter if specified
+   - Drive time constraints (e.g., drive_time_minutes <= 45)
+   - Exclusion list filter
+
+**Scoring Breakdown**:
+- **Potential Uplift (30 points max)**: Revenue opportunity based on growth potential (0-1.5 scale)
+- **Receptivity (25 points max)**: Likelihood to engage (0-100 scale)
+- **Churn Risk (20 points max)**: Risk of losing prescriber (0-0.5 scale)
+- **Gap to Goal (15 points)**: Binary flag for being behind target
+- **Contact Overdue (10 points)**: Binary flag for >45 days since contact
+
+**Data Source**: public.healthcare_data
+
+
+### Prescribing Trend Analysis Pattern
+
+**Purpose**: Identify HCPs with significant prescribing changes
+
+**Key Indicators**:
+- **Growth**: `trx_28d_wow_pct > 0.1` (>10% week-over-week increase)
+- **Decline**: `trx_28d_wow_pct < -0.1` (<-10% week-over-week decrease)
+- **Share Gain**: `share_28d_delta > 0.05` (>5% share increase)
+- **Share Loss**: `share_28d_delta < -0.05` (<-5% share decrease)
+
+**Trend Classification Logic**:
+```
+CASE 
+    WHEN trx_28d_wow_pct > 0.15 AND share_28d_delta > 0.05 THEN 'Strong Growth'
+    WHEN trx_28d_wow_pct > 0 AND share_28d_delta > 0 THEN 'Moderate Growth'
+    WHEN trx_28d_wow_pct < -0.15 OR share_28d_delta < -0.05 THEN 'Declining'
+    WHEN trx_28d_wow_pct < 0 OR share_28d_delta < 0 THEN 'Slight Decline'
+    ELSE 'Stable'
+END
+```
+
+**Data Source**: public.healthcare_data
+
+
+### Competitive Threat Detection Pattern
+
+**Purpose**: Identify HCPs where competitors are gaining ground
+
+**Key Signals**:
+- `comp_share_28d_delta > 0.05` (competitor share increased >5%)
+- `comp_detail_60d_cnt > calls_90d_cnt` (competitor calling more)
+- `comp_formulary_win_30d_flag = 1` (competitor won formulary access)
+
+**Competitive Pressure Classification**:
+```
+CASE 
+    WHEN comp_detail_60d_cnt > calls_90d_cnt AND comp_share_28d_delta > 0.05 THEN 'High Competitive Pressure'
+    WHEN comp_detail_60d_cnt > calls_90d_cnt THEN 'Moderate Competitive Pressure'
+    WHEN comp_share_28d_delta > 0.05 THEN 'Share Loss Risk'
+    ELSE 'Low Competitive Pressure'
+END
+```
+
+**Data Source**: public.healthcare_data
+
+
+### Access Quality Assessment Pattern
+
+**Purpose**: Evaluate market access barriers for HCPs
+
+**Good Access Criteria**:
+- `formulary_tier_score <= 2` (favorable formulary position)
+- `prior_auth_required_flag = 0` (no prior auth requirement)
+- `step_therapy_required_flag = 0` (no step therapy requirement)
+- `access_friction_index < 0.5` (low overall friction)
+
+**Access Friction Levels**:
+- High friction: `access_friction_index > 0.7`
+- Medium friction: `access_friction_index 0.4-0.7`
+- Low friction: `access_friction_index < 0.4`
+
+**Data Source**: public.healthcare_data
+
+
+### Route Optimization Pattern
+
+**Purpose**: Plan efficient territory coverage
+
+**Key Factors**:
+1. **Distance Grouping**:
+   - Nearby: `drive_time_minutes <= 30`
+   - Medium: `drive_time_minutes > 30 AND drive_time_minutes <= 45`
+   - Far: `drive_time_minutes > 45 AND drive_time_minutes <= 60`
+
+2. **Scheduling Windows**:
+   - Morning available: `morning_window_allowed_flag = 1`
+   - Afternoon available: `afternoon_window_allowed_flag = 1`
+
+3. **Priority Weighting**: Order by distance, then by priority_score DESC
+
+**Data Source**: public.healthcare_data
+
+
+## Standard Filters (Apply to Most Queries)
+
+```sql
+WHERE exclusion_list_flag = false
+    AND feature_completeness_pct > 0.7
+    AND prescribing_freshness_days < 14
+```
+
+
+## Scoring Thresholds (Based on Actual Data Ranges)
+
+### Receptivity Score
+- High receptivity: > 70
+- Medium receptivity: 50-70
+- Low receptivity: < 50
+
+### Potential Uplift Index
+- High potential: > 0.7
+- Medium potential: 0.4-0.7
+- Low potential: < 0.4
+
+### Churn Risk Score
+- High risk: > 0.3
+- Medium risk: 0.15-0.3
+- Low risk: < 0.15
+
+### Access Friction Index
+- High friction: > 0.7
+- Medium friction: 0.4-0.7
+- Low friction: < 0.4
+
+
+## Common Aggregation Patterns
+
+### Territory-Level Aggregations
+- `GROUP BY territory_id`
+- Metrics: `COUNT(DISTINCT hcp_id)`, `SUM(trx_28d)`, `AVG(share_28d)`, `SUM(gap_to_goal_28d)`
+
+### Specialty-Level Aggregations
+- `GROUP BY specialty_primary`
+- Useful for understanding specialty-specific trends
+
+### Time-Based Aggregations
+- Weekly: `DATE_TRUNC('week', as_of_date)`
+- Monthly: `DATE_TRUNC('month', as_of_date)`
+- Quarterly: `DATEADD(quarter, -1, as_of_date)`
+
+
+## Natural Language to SQL Mapping
+
+### Territory Questions
+- "which territory to focus on" → Territory prioritization with urgency scoring
+- "which territory needs attention" → Territory prioritization with urgency scoring
+- "territory with highest risk" → Territory prioritization ordered by churn risk
+
+### HCP Questions
+- "which HCP to target" → HCP prioritization with composite scoring
+- "high priority HCPs" → HCP prioritization filtered by priority_score > 60
+- "at-risk HCPs" → Filter by churn_risk_score > 0.3
+- "overdue contacts" → Filter by last_contact_days_ago > 45
+
+### Trend Questions
+- "growing prescribers" → Filter by trx_28d_wow_pct > 0.1
+- "declining prescribers" → Filter by trx_28d_wow_pct < -0.1
+- "share gaining" → Filter by share_28d_delta > 0.05
+
+### Competitive Questions
+- "competitive threats" → Filter by comp_share_28d_delta > 0.05
+- "competitor activity" → Analyze comp_detail_60d_cnt, comp_sample_60d_cnt
+
+### Access Questions
+- "good access" → Filter by access_friction_index < 0.5 AND prior_auth_required_flag = 0
+- "access barriers" → Filter by prior_auth_required_flag = 1 OR step_therapy_required_flag = 1
+
+
+## Key Business Rules
+
+1. **Always filter exclusion_list_flag = false** for active targeting
+2. **Use latest data**: `as_of_date = MAX`
+3. **Respect compliance**: Check max_calls_per_28d and min_days_between_calls
+4. **Drive time optimization**: Prioritize HCPs within 45 minutes
+5. **Contact cadence**: Flag HCPs with last_contact_days_ago > 45
+6. **Competitive threshold**: Monitor comp_share_28d_delta > 0.05 (5%)
+7. **Trend significance**: Consider trx_28d_wow_pct > 0.1 or < -0.1 (10%)
+8. **Territory discovery**: Use GROUP BY territory_id when asked "which territory"
+9. **HCP discovery**: Use individual rows when asked "which HCP"
+10. **Include data source**: Always mention "Data Source: public.healthcare_data"
+
+
+## Priority Score Interpretation
+
+- **80-100 points**: Critical priority (high potential + at-risk + overdue)
+- **60-79 points**: High priority (strong opportunity or retention need)
+- **40-59 points**: Moderate priority (some opportunity, routine follow-up)
+- **20-39 points**: Low priority (maintain relationship)
+- **0-19 points**: Minimal priority (monitor only)
+
+
+## Redshift-Specific Syntax Notes
+
+- Use `CURRENT_DATE` instead of GETDATE()
+- Date arithmetic: `CURRENT_DATE - INTERVAL '7 days'` or `DATEADD(day, -7, CURRENT_DATE)`
+- Boolean comparisons: Use `= TRUE` or `= FALSE` explicitly
+- Aggregations: `SUM()`, `AVG()`, `COUNT()`, `MAX()`, `MIN()` are standard
+- Window functions: `ROW_NUMBER()`, `RANK()`, `DENSE_RANK()` supported
+- CTEs: Use `WITH` clause for complex queries

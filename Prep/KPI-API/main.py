@@ -6,6 +6,7 @@ import os
 from typing import Any, Dict, Optional
 from utils import execute_redshift_sql
 from KPI.queries import kpi_overview_sql
+from mangum import Mangum
 import logging
 load_dotenv()
 cors_origins_env = os.getenv("CORS_ALLOW_ORIGINS", "")
@@ -17,7 +18,7 @@ ALLOWED_ORIGINS = [
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("hcp_kpi_api")
 
-app = FastAPI(title="HCP KPI API (Production)", version="1.0")
+app = FastAPI(title="HCP KPI API (Production)", version="1.0",root_path="/v1")
 
 if ALLOWED_ORIGINS:
     logger.info("CORS enabled for origins: %s", ALLOWED_ORIGINS)
@@ -107,3 +108,5 @@ def kpi_overview(user_id: str = Query(..., description="username, (e.g. vivek.ku
     dashboard = build_response_from_row(rows[0])
     logger.info("KPI served successfully for user=%s", user_id)
     return dashboard
+
+handler = Mangum(app)

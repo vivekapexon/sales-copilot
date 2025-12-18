@@ -56,7 +56,7 @@ SC_PRC_ACTION_AGENT_RUNTIME_ARN = get_parameter_value("SC_POC_ACTION_AGENT_ARN")
 SC_PRC_STRUCTURE_AGENT_RUNTIME_ARN = get_parameter_value("SC_POC_STRUCTURE_AGENT_ARN")
 SC_PRC_COMPILANCE_AGENT_RUNTIME_ARN = get_parameter_value("SC_POC_COMPILANCE_AGENT_ARN")
 SC_PRC_SENTIMENT_AGENT_RUNTIME_ARN = get_parameter_value("SC_POC_SENTIMENT_AGENT_ARN")
-SC_PRC_TRANSCRIPT_AGENT_RUNTIME_ARN = get_parameter_value("SC_POC_TRANSCRIPT_AGENT_ARN")
+
 
 
 # =============================================================================
@@ -70,14 +70,13 @@ CLOSED WORLD RULE (ABSOLUTE, NON-NEGOTIABLE)
 =======================================================================
 You may ONLY use the following Tools/Agents.
 This list is FINAL, EXHAUSTIVE, and CLOSED:
-1. Transcription Agent
-2. Structure Agent
-3. Compliance Agent
-4. Action Agent
-5. Sentiment Agent
+1. Structure Agent
+2. Compliance Agent
+3. Action Agent
+4. Sentiment Agent
 
 NO other tool and agents exists.
-You must NOT create, assume, infer, rename, insert, extend, or invent ANY additional agents or analysis beyond these five tools.
+You must NOT create, assume, infer, rename, insert, extend, or invent ANY additional agents or analysis beyond these four tools.
 ============================================================
 STEP 1: INTENT CLASSIFICATION (DO THIS FIRST)
 ============================================================
@@ -92,20 +91,20 @@ STEP 1: INTENT CLASSIFICATION (DO THIS FIRST)
     "post-call", "full summary", "meeting summary", "follow-up email", "action items",
     "insights", "objections", "next steps", "everything from my call", "post-call prep"
     Call Agents:
-    Transcription → Structure → Compliance → Action → Sentiment
+    Structure → Compliance → Action → Sentiment
     Example NLQs:
     - "Give me the full post-call summary for my call with Dr. Rao"
     - "Post-call prep and follow-up email for Dr. Patel"
     - "Everything from my last call with H123"
     -------------------------------------------------------------------
-    2. **transcription_only**
+    2. **transcription_via_structure**
     -------------------------------------------------------------------
     Purpose:
-    User wants only the raw transcription of the call.
+    User wants transcription - delegate to Structure Agent.
     Keywords:
     "transcribe", "transcription", "what was said", "audio to text", "transcript"
     Call Agents:
-    Transcription Agent ONLY
+    Structure Agent
     Examples:
     - "Transcribe my call with Dr. Mehta"
     - "Give me the transcription for call C789"
@@ -118,7 +117,7 @@ STEP 1: INTENT CLASSIFICATION (DO THIS FIRST)
     "call notes", "objections", "key topics", "what was discussed",
     "samples mentioned", "content shared", "structured summary"
     Call Agents:
-    Transcription Agent → Structure Agent
+    Structure Agent
     Examples:
     - "What objections did Dr. Sharma raise?"
     - "Show me structured notes from my call with Dr. X"
@@ -131,7 +130,7 @@ STEP 1: INTENT CLASSIFICATION (DO THIS FIRST)
     "sentiment", "tone", "receptivity", "relationship stage",
     "next call risk", "objection intensity", "positive negative ratio", "insights"
     Call Agents:
-    Transcription Agent → Sentiment Agent
+    Sentiment Agent
     Examples:
     - "What was the sentiment of my call with Dr. Lee?"
     - "Give me insights and next-call risk for Dr. Patel"
@@ -157,7 +156,7 @@ STEP 1: INTENT CLASSIFICATION (DO THIS FIRST)
     "action items", "next steps", "commitments", "samples to send",
     "follow-ups", "what I promised", "calendar block"
     Call Agents:
-    Transcription Agent → Action Agent
+    Action Agent
     Examples:
     - "What action items came out of my call with Dr. Rao?"
     - "Did I commit to sending samples to Dr. Y?"
@@ -169,7 +168,7 @@ STEP 1: INTENT CLASSIFICATION (DO THIS FIRST)
     Keywords:
     "summary and insights", "notes and sentiment", "objections and tone"
     Call Agents:
-    Transcription Agent → Structure Agent + Sentiment Agent
+    Structure Agent + Sentiment Agent
     Examples:
     - "Give me call notes and sentiment for Dr. Sharma"
     - "Structured summary plus receptivity for H123"
@@ -196,14 +195,13 @@ STEP 3: CALL ONLY NECESSARY AGENTS
 ============================================================
 IMPORTANT: Do NOT call agents outside your classified intent.
 Dependency rules:
-- Structure, Sentiment, Action Agents require transcription_text
-- If transcription_text not provided by user → Supervisor MUST call Transcription Agent first
-- Compliance Agent can run standalone (does not strictly require transcription)
+- All agents operate independently
+- Compliance Agent can run standalone
 Example:
-  - "Transcribe my call" → Call ONLY Transcription Agent
-  - "What objections were raised?" → Transcription → Structure
+  - "Transcribe my call" → Structure Agent
+  - "What objections were raised?" → Structure Agent
   - "Generate follow-up email" → Compliance Agent ONLY
-  - "Full post-call" → All 5 agents in correct order
+  - "Full post-call" → All 4 agents
 ============================================================
 STEP 4: MERGE & STRUCTURE OUTPUT
 ============================================================
@@ -213,27 +211,24 @@ If transcription was fetched internally, pass it downstream but do not duplicate
 ============================================================
 STRICT NEGATIVE RULES (NON-NEGOTIABLE)
 ============================================================
-• Do NOT call agents outside the 5 listed above.
+• Do NOT call agents outside the 4 listed above.
 • Do NOT call agents not required for the intent.
 • Do NOT add parameters tools don't support.
 • Do NOT generate data yourself. All facts come from tool outputs.
-• Do NOT run Structure/Sentiment/Action without valid transcription.
-• If Transcription Agent fails or returns insufficient_data → halt dependent agents.
-• Do NOT call all 5 agents unless intent is full_post_call_prep.
+• Do NOT call all 4 agents unless intent is full_post_call_prep.
 • Never hallucinate transcription, notes, or sentiment.
 ============================================================
 AGENT CAPABILITIES (KNOWLEDGE BASE)
 ============================================================
-1. TranscriptionAgent: Returns full transcript + metadata (call_id, timestamps, confidence). May return insufficient_data: true.
-2. StructureAgent: Returns categorized objections, key topics, content shared, samples discussed, compliance flags.
-3. ComplianceAgent: Returns followup_email_subject, followup_email_body, template_id. Can work with or without transcript.
-4. ActionAgent: Returns action_items_json, priority, calendar_block_minutes, primary_action_type.
-5. SentimentAgent: Returns quantified sentiment JSON (call_sentiment_score, relationship_stage, next_call_risk_level, etc.).
+1. StructureAgent: Returns categorized objections, key topics, content shared, samples discussed, compliance flags. Can extract call content for transcription requests.
+2. ComplianceAgent: Returns followup_email_subject, followup_email_body, template_id.
+3. ActionAgent: Returns action_items_json, priority, calendar_block_minutes, primary_action_type.
+4. SentimentAgent: Returns quantified sentiment JSON (call_sentiment_score, relationship_stage, next_call_risk_level, etc.).
 No other capabilities exist. Do not infer extra functions.
 ============================================================
 FAIL-SAFE LOGIC
 ============================================================
-• If no usable transcription and one is required → return TranscriptionAgent output with insufficiency flag and skip dependent agents.
+
 • If tools return empty/partial data, propagate with low-confidence tagging.
 • Never substitute your own invented values.
 • Never fabricate fallback "insights" or "notes."
@@ -403,46 +398,7 @@ def structure_agent_tool(intent: str) -> dict:
         return {"error": "structure_agent_tool invocation failed", "status": "error"}
 
 
-@tool
-def transcription_agent_tool(intent: str) -> dict:
-    """
-    Invoke the Transcription Agent via Bedrock Agent Runtime.
-    
-    Retrieves and processes call transcriptions with metadata including 
-    call IDs, timestamps, and confidence scores. Acts as the foundational
-    data source for downstream agents requiring call content analysis.
 
-    Args:
-        intent (str): Natural language prompt describing the transcription request.
-                     Should specify which call to retrieve and any specific segments needed.
-
-    Returns:
-        dict: Agent response containing:
-              - transcript: Full text transcription of the call
-              - call_id: Unique identifier for the call
-              - timestamps: Speaker segments with timing information
-              - confidence_score: Quality/accuracy metric for transcription
-              - metadata: Additional call information (duration, participants, etc.)
-              Or insufficient_data flag if transcript unavailable.
-    """
-    session_id = f"nl-{uuid.uuid4().hex}{uuid.uuid4().hex[:8]}"
-    payload = json.dumps({"prompt": intent, "session_id": session_id})
-    
-    kwargs = {
-        "agentRuntimeArn": SC_PRC_TRANSCRIPT_AGENT_RUNTIME_ARN,
-        "runtimeSessionId": session_id,
-        "payload": payload,
-    }
-    body = None
-    
-    try:
-        resp = agentcore_client.invoke_agent_runtime(**kwargs)
-        body = resp["response"].read()
-        return json.loads(body.decode("utf-8") if isinstance(body, (bytes, bytearray)) else body)
-    except Exception:
-        if body:
-            return {"result": body.decode("utf-8") if isinstance(body, (bytes, bytearray)) else str(body)}
-        return {"error": "transcription_agent_tool invocation failed", "status": "error"}
 
 
 @tool
@@ -510,7 +466,7 @@ def _tools_list() -> list:
         action_agent_tool,
         sentiment_agent_tool,
         structure_agent_tool,
-        transcription_agent_tool,
+
         compilance_agent_tool
     ]
 

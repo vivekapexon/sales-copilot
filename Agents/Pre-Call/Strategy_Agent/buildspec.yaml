@@ -55,7 +55,7 @@ phases:
           --execution-role "$RUNTIME_ROLE_ARN" \
           --region "$REGION" \
           --non-interactive
-
+      - agentcore launch --help
       - agentcore launch --codebuild-role-arn arn:aws:iam::969385807621:role/sales-copilot-codebuild-service-role  --auto-update-on-conflict
 
       - AGENT_ARN=$(grep "agent_arn:" .bedrock_agentcore.yaml | awk '{print $2}')

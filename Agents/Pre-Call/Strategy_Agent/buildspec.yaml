@@ -61,7 +61,7 @@ phases:
         CODEBUILD_EXECUTION_ROLE=$(yq -r '
           .agents[.default_agent].codebuild.execution_role
         ' .bedrock_agentcore.yaml)
-
+      - echo $CODEBUILD_EXECUTION_ROLE
 
       - |
         aws iam attach-role-policy \

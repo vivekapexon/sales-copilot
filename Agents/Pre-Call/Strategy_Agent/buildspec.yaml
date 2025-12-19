@@ -71,7 +71,7 @@ phases:
         ' .bedrock_agentcore.yaml)
       - echo $CODEBUILD_EXECUTION_ROLE
 
-      - agentcore launch --auto-update-on-conflict
+      - agentcore deploy --auto-update-on-conflict
 
       - AGENT_ARN=$(grep "agent_arn:" .bedrock_agentcore.yaml | awk '{print $2}')
       - echo "✓ $SERVICE_NAME Agent deployed- $AGENT_ARN"

@@ -7,6 +7,7 @@ env:
     AGENT_REPO_PATH: "Agents/Pre-Call/Strategy_Agent/"
     REGION: "us-east-1"
     RUNTIME_ROLE_ARN: "arn:aws:iam::969385807621:role/AgentCoreRuntimeRole"
+    CODEBUILD_ROLE_ARN: "arn:aws:iam::969385807621:role/sales-copilot-codebuild-service-role"
 
 
 phases:
@@ -61,7 +62,7 @@ phases:
 
       - |
         yq -i '
-          .agents[.default_agent].codebuild.execution_role = strenv(RUNTIME_ROLE_ARN)
+          .agents[.default_agent].codebuild.execution_role = strenv(CODEBUILD_ROLE_ARN)
         ' .bedrock_agentcore.yaml
 
       - |

@@ -55,7 +55,7 @@ phases:
           --execution-role "$RUNTIME_ROLE_ARN" \
           --region "$REGION" \
           --non-interactive
-      
+      - cat .bedrock_agentcore.yaml  
       - agentcore deploy --auto-update-on-conflict
 
       - AGENT_ARN=$(grep "agent_arn:" .bedrock_agentcore.yaml | awk '{print $2}')

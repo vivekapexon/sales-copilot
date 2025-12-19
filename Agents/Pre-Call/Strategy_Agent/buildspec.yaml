@@ -17,6 +17,7 @@ phases:
      # Install system dependencies
       - apt update
       - apt install openssh-client jq yq tar gzip
+      - wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/local/bin/yq && chmod +x /usr/local/bin/yq
 
       - |
           if ! command -v aws &> /dev/null; then

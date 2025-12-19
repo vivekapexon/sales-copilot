@@ -22,7 +22,7 @@ phases:
       - |
           if ! command -v aws &> /dev/null; then
             curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-            unzip awscliv2.zip &>/dev/null
+            unzip awscliv2.zip
             ./aws/install --update
           fi
 
@@ -56,6 +56,8 @@ phases:
           --execution-role "$RUNTIME_ROLE_ARN" \
           --region "$REGION" \
           --non-interactive
+      - ls -alrt
+      - cat .bedrock_agentcore.yaml
 
       - |
         CODEBUILD_EXECUTION_ROLE=$(yq -r '

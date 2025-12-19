@@ -16,7 +16,7 @@ phases:
       - pwd
      # Install system dependencies
       - apt update
-      - apt install openssh-client jq tar gzip
+      - apt install openssh-client jq yq tar gzip
 
       - |
           if ! command -v aws &> /dev/null; then
@@ -55,8 +55,20 @@ phases:
           --execution-role "$RUNTIME_ROLE_ARN" \
           --region "$REGION" \
           --non-interactive
-      - cat .bedrock_agentcore.yaml  
-      - agentcore deploy --auto-update-on-conflict
+
+      - |
+        CODEBUILD_EXECUTION_ROLE=$(yq -r '
+          .agents[.default_agent].codebuild.execution_role
+        ' .bedrock_agentcore.yaml)
+
+
+      - |
+        aws iam attach-role-policy \
+          --role-name $CODEBUILD_EXECUTION_ROLE \
+          --policy-arn arn:aws:iam::aws:policy/AWSCodeBuildAdminAccess \
+          --region $REGION
+
+      - agentcore launch --auto-update-on-conflict
 
       - AGENT_ARN=$(grep "agent_arn:" .bedrock_agentcore.yaml | awk '{print $2}')
       - echo "✓ $SERVICE_NAME Agent deployed- $AGENT_ARN"

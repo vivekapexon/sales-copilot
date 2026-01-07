@@ -1,0 +1,95 @@
+version: 0.2
+
+env:
+  variables:
+    SERVICE_NAME: "structure_agent"
+    USECASE_NAME: "sales-copilot"
+    AGENT_REPO_PATH: "Agents/Post-Call/Structure-Agent/"
+    REGION: "us-east-1"
+    RUNTIME_ROLE_ARN: "arn:aws:iam::969385807621:role/AgentCoreRuntimeRole"
+    CODEBUILD_ROLE_ARN: "arn:aws:iam::969385807621:role/sales-copilot-codebuild-service-role"
+
+
+phases:
+  install:
+    commands:
+      - echo "=== INSTALL PHASE ==="
+      - pwd
+     # Install system dependencies
+      - apt update
+      - apt install openssh-client jq tar gzip
+      - wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/local/bin/yq && chmod +x /usr/local/bin/yq
+
+      - |
+          if ! command -v aws &> /dev/null; then
+            curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+            unzip awscliv2.zip
+            ./aws/install --update
+          fi
+
+      - python --version
+      - aws --version
+
+  pre_build:
+    commands:
+      - echo "Creating virtual environment"
+      - cd $AGENT_REPO_PATH
+      - python3 -m venv agent/$SERVICE_NAME
+      - . agent/$SERVICE_NAME/bin/activate
+      - pip install -r requirements.txt
+      # Check prerequisites
+      - |
+        if ! python3 -c "import bedrock_agentcore" 2>/dev/null; then
+          echo "Installing bedrock-agentcore..."
+          pip3 install --upgrade bedrock-agentcore bedrock-agentcore-starter-toolkit boto3 botocore
+        fi
+
+  build:
+    commands:
+      - echo "=== BUILD PHASE ==="
+      - echo "Deploying AgentCore agents..."
+      - echo "Deploying $SERVICE_NAME Agent..."
+
+      - |
+        agentcore configure \
+          --entrypoint ${SERVICE_NAME}.py \
+          --name ${SERVICE_NAME} \
+          --execution-role "$RUNTIME_ROLE_ARN" \
+          --region "$REGION" \
+          --non-interactive
+      - ls -alrt
+      - cat .bedrock_agentcore.yaml
+
+      - |
+        yq -i '
+          .agents[.default_agent].codebuild.execution_role = strenv(CODEBUILD_ROLE_ARN)
+        ' .bedrock_agentcore.yaml
+
+      - |
+        CODEBUILD_EXECUTION_ROLE=$(yq -r '
+          .agents[.default_agent].codebuild.execution_role
+        ' .bedrock_agentcore.yaml)
+      - echo $CODEBUILD_EXECUTION_ROLE
+
+      - agentcore deploy --auto-update-on-conflict
+
+      - AGENT_ARN=$(grep "agent_arn:" .bedrock_agentcore.yaml | awk '{print $2}')
+      - echo "✓ $SERVICE_NAME Agent deployed- $AGENT_ARN"
+
+      - # Update SSM parameter
+
+      - |
+        aws ssm put-parameter \
+          --name /$USECASE_NAME/$SERVICE_NAME/AGENT_RUNTIME_ARN \
+          --value "$AGENT_ARN" \
+          --type String \
+          --overwrite \
+          --region $REGION
+
+      - echo "✓ AgentCore agents deployed"
+
+
+artifacts:
+  files:
+    - '**/*'
+  base-directory: $BUILD_OUTPUT_DIR

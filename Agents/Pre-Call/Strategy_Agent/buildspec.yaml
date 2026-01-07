@@ -9,7 +9,6 @@ env:
     RUNTIME_ROLE_ARN: "arn:aws:iam::969385807621:role/AgentCoreRuntimeRole"
     CODEBUILD_ROLE_ARN: "arn:aws:iam::969385807621:role/sales-copilot-codebuild-service-role"
 
-
 phases:
   install:
     commands:
